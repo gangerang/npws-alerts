@@ -1,0 +1,35 @@
+{
+  "name": "npws-alerts",
+  "version": "1.0.0",
+  "description": "NPWS National Parks alerts data capture and geospatial processing",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "watch": "nodemon --exec ts-node src/index.ts",
+    "fetch-once": "ts-node src/index.ts --once"
+  },
+  "keywords": [
+    "npws",
+    "national-parks",
+    "alerts",
+    "geospatial",
+    "gis"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "node-cron": "^3.0.3",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^20.14.0",
+    "@types/node-cron": "^3.0.11",
+    "nodemon": "^3.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  }
+}
