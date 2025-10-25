@@ -15,9 +15,10 @@ export class GeoDataFetcher {
       console.log('Fetching reserve geospatial data from ArcGIS...');
 
       // Fetch in batches to handle large datasets
+      // Using smaller batch size when geometry is enabled to avoid API errors
       const features: ArcGISFeature[] = [];
       let offset = 0;
-      const batchSize = 1000;
+      const batchSize = 50; // Reduced from 1000 to avoid 500 errors with geometry
       let hasMore = true;
 
       while (hasMore) {
@@ -64,12 +65,11 @@ export class GeoDataFetcher {
   private async fetchReserveBatch(offset: number, limit: number): Promise<FetchResult<ArcGISFeature[]>> {
     try {
       // Build query URL for ArcGIS REST API
-      // Note: We start with returnGeometry=false to avoid 500 errors
-      // You can change this to 'true' later if needed
+      // Using smaller batch size (50) with geometry enabled
       const params = new URLSearchParams({
         where: '1=1', // Get all features
         outFields: '*', // Get all fields
-        returnGeometry: 'false', // Temporarily disabled due to 500 errors
+        returnGeometry: 'true', // Re-enabled with smaller batch size
         f: 'json',
         resultOffset: offset.toString(),
         resultRecordCount: limit.toString(),

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NSW National Parks Alerts Map</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>NSW National Parks Alerts</h1>
+            <div class="stats" id="stats">
+                <span class="stat-item">Loading...</span>
+            </div>
+        </header>
+
+        <!-- Controls Panel -->
+        <div class="controls-panel">
+            <div class="control-group">
+                <label for="category-filter">Category:</label>
+                <select id="category-filter">
+                    <option value="">All Categories</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="time-filter">Time:</label>
+                <select id="time-filter">
+                    <option value="current">Current Alerts</option>
+                    <option value="future">Future Alerts</option>
+                    <option value="all">All Alerts</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="search-input">Search Park:</label>
+                <input type="text" id="search-input" placeholder="Enter park name...">
+            </div>
+
+            <button id="apply-filters" class="btn-primary">Apply Filters</button>
+            <button id="clear-filters" class="btn-secondary">Clear</button>
+        </div>
+
+        <!-- Map Container -->
+        <div id="map"></div>
+
+        <!-- Alert Details Panel (hidden by default) -->
+        <div id="details-panel" class="details-panel hidden">
+            <button class="close-btn" id="close-details">&times;</button>
+            <div id="details-content"></div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Custom JS -->
+    <script src="app.js"></script>
+</body>
+</html>
