@@ -64,10 +64,12 @@ export class GeoDataFetcher {
   private async fetchReserveBatch(offset: number, limit: number): Promise<FetchResult<ArcGISFeature[]>> {
     try {
       // Build query URL for ArcGIS REST API
+      // Note: We start with returnGeometry=false to avoid 500 errors
+      // You can change this to 'true' later if needed
       const params = new URLSearchParams({
         where: '1=1', // Get all features
         outFields: '*', // Get all fields
-        returnGeometry: 'true',
+        returnGeometry: 'false', // Temporarily disabled due to 500 errors
         f: 'json',
         resultOffset: offset.toString(),
         resultRecordCount: limit.toString(),
@@ -87,7 +89,7 @@ export class GeoDataFetcher {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data: ArcGISQueryResponse = await response.json();
+      const data: any = await response.json();
 
       if (data.features && Array.isArray(data.features)) {
         return {
@@ -95,6 +97,11 @@ export class GeoDataFetcher {
           data: data.features,
         };
       } else {
+        console.error('Response keys:', Object.keys(data));
+        if (data.error) {
+          console.error('ArcGIS API Error:', JSON.stringify(data.error, null, 2));
+          throw new Error(`ArcGIS API Error: ${data.error.message || JSON.stringify(data.error)}`);
+        }
         throw new Error('Invalid response structure from ArcGIS API');
       }
     } catch (error) {
@@ -129,7 +136,7 @@ export class GeoDataFetcher {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data: ArcGISQueryResponse = await response.json();
+      const data: any = await response.json();
 
       if (data.features && data.features.length > 0) {
         return {
@@ -189,7 +196,7 @@ export class GeoDataFetcher {
         if (paths.length === 1) {
           return `LINESTRING(${paths[0]})`;
         } else {
-          return `MULTILINESTRING(${paths.map(p => `(${p})`).join(', ')})`;
+          return `MULTILINESTRING(${paths.map((p: string) => `(${p})`).join(', ')})`;
         }
       }
 

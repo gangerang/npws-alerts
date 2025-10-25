@@ -38,23 +38,26 @@ export class NPWSDatabase {
   public upsertAlert(alert: Omit<AlertRecord, 'id' | 'created_at' | 'updated_at'>): void {
     const stmt = this.db.prepare(`
       INSERT INTO alerts (
-        alert_id, reserve_id, alert_title, alert_description,
-        alert_type, alert_status, start_date, end_date,
-        last_modified, is_future, raw_data
+        alert_id, park_name, park_id, reserve_id, alert_title, alert_description,
+        alert_category, start_date, end_date, last_reviewed,
+        park_closed, park_part_closed, is_future, raw_data
       ) VALUES (
-        @alert_id, @reserve_id, @alert_title, @alert_description,
-        @alert_type, @alert_status, @start_date, @end_date,
-        @last_modified, @is_future, @raw_data
+        @alert_id, @park_name, @park_id, @reserve_id, @alert_title, @alert_description,
+        @alert_category, @start_date, @end_date, @last_reviewed,
+        @park_closed, @park_part_closed, @is_future, @raw_data
       )
       ON CONFLICT(alert_id, is_future) DO UPDATE SET
+        park_name = @park_name,
+        park_id = @park_id,
         reserve_id = @reserve_id,
         alert_title = @alert_title,
         alert_description = @alert_description,
-        alert_type = @alert_type,
-        alert_status = @alert_status,
+        alert_category = @alert_category,
         start_date = @start_date,
         end_date = @end_date,
-        last_modified = @last_modified,
+        last_reviewed = @last_reviewed,
+        park_closed = @park_closed,
+        park_part_closed = @park_part_closed,
         raw_data = @raw_data,
         updated_at = CURRENT_TIMESTAMP
     `);
@@ -82,17 +85,20 @@ export class NPWSDatabase {
   public upsertReserve(reserve: Omit<ReserveRecord, 'id' | 'created_at' | 'updated_at'>): void {
     const stmt = this.db.prepare(`
       INSERT INTO reserves (
-        object_id, name_short, name_long, reserve_id,
-        area_ha, gazettal_date, geometry_type, raw_data
+        object_id, name, name_short, location, reserve_type,
+        reserve_no, gaz_area, gis_area, gazettal_date, geometry_type, raw_data
       ) VALUES (
-        @object_id, @name_short, @name_long, @reserve_id,
-        @area_ha, @gazettal_date, @geometry_type, @raw_data
+        @object_id, @name, @name_short, @location, @reserve_type,
+        @reserve_no, @gaz_area, @gis_area, @gazettal_date, @geometry_type, @raw_data
       )
       ON CONFLICT(object_id) DO UPDATE SET
+        name = @name,
         name_short = @name_short,
-        name_long = @name_long,
-        reserve_id = @reserve_id,
-        area_ha = @area_ha,
+        location = @location,
+        reserve_type = @reserve_type,
+        reserve_no = @reserve_no,
+        gaz_area = @gaz_area,
+        gis_area = @gis_area,
         gazettal_date = @gazettal_date,
         geometry_type = @geometry_type,
         raw_data = @raw_data,
@@ -130,16 +136,28 @@ export class NPWSDatabase {
   }
 
   /**
-   * Get alerts by reserve ID
+   * Get alerts by park name
    */
-  public getAlertsByReserveId(reserveId: number, isFuture: boolean = false): AlertRecord[] {
+  public getAlertsByParkName(parkName: string, isFuture: boolean = false): AlertRecord[] {
     const stmt = this.db.prepare(`
       SELECT * FROM alerts
-      WHERE reserve_id = ? AND is_future = ?
+      WHERE park_name = ? AND is_future = ?
       ORDER BY start_date DESC
     `);
 
-    return stmt.all(reserveId, isFuture ? 1 : 0) as AlertRecord[];
+    return stmt.all(parkName, isFuture ? 1 : 0) as AlertRecord[];
+  }
+
+  /**
+   * Get reserve by name
+   */
+  public getReserveByName(name: string): ReserveRecord | undefined {
+    const stmt = this.db.prepare(`
+      SELECT * FROM reserves
+      WHERE name = ? OR name_short = ?
+    `);
+
+    return stmt.get(name, name) as ReserveRecord | undefined;
   }
 
   /**
@@ -152,18 +170,6 @@ export class NPWSDatabase {
     `);
 
     return stmt.get(nameShort) as ReserveRecord | undefined;
-  }
-
-  /**
-   * Get reserve by reserve_id
-   */
-  public getReserveByReserveId(reserveId: number): ReserveRecord | undefined {
-    const stmt = this.db.prepare(`
-      SELECT * FROM reserves
-      WHERE reserve_id = ?
-    `);
-
-    return stmt.get(reserveId) as ReserveRecord | undefined;
   }
 
   /**
@@ -181,12 +187,14 @@ export class NPWSDatabase {
     const stmt = this.db.prepare(`
       SELECT
         a.*,
+        r.name as reserve_name,
         r.name_short as reserve_name_short,
-        r.name_long as reserve_name_long,
-        r.area_ha as reserve_area_ha,
+        r.location as reserve_location,
+        r.reserve_type as reserve_type,
+        r.gis_area as reserve_area,
         r.geometry_type as reserve_geometry_type
       FROM alerts a
-      LEFT JOIN reserves r ON a.reserve_id = r.reserve_id
+      LEFT JOIN reserves r ON a.park_name = r.name OR a.park_name = r.name_short
       WHERE a.is_future = ?
       ORDER BY a.start_date DESC
     `);

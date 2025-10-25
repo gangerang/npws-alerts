@@ -56,15 +56,18 @@ export class DatabaseSchema {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS alerts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        alert_id INTEGER NOT NULL,
-        reserve_id INTEGER NOT NULL,
+        alert_id TEXT NOT NULL,
+        park_name TEXT NOT NULL,
+        park_id TEXT NOT NULL,
+        reserve_id INTEGER,
         alert_title TEXT NOT NULL,
         alert_description TEXT,
-        alert_type TEXT,
-        alert_status TEXT,
+        alert_category TEXT,
         start_date TEXT,
         end_date TEXT,
-        last_modified TEXT,
+        last_reviewed TEXT,
+        park_closed INTEGER NOT NULL DEFAULT 0,
+        park_part_closed INTEGER NOT NULL DEFAULT 0,
         is_future INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -84,10 +87,13 @@ export class DatabaseSchema {
       CREATE TABLE IF NOT EXISTS reserves (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         object_id INTEGER NOT NULL UNIQUE,
+        name TEXT NOT NULL,
         name_short TEXT NOT NULL,
-        name_long TEXT,
-        reserve_id INTEGER,
-        area_ha REAL,
+        location TEXT,
+        reserve_type TEXT,
+        reserve_no TEXT,
+        gaz_area REAL,
+        gis_area REAL,
         gazettal_date TEXT,
         geometry_type TEXT,
         geometry_wkt TEXT,
@@ -131,23 +137,23 @@ export class DatabaseSchema {
    */
   private createIndexes(): void {
     this.db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_alerts_reserve_id
-        ON alerts(reserve_id);
+      CREATE INDEX IF NOT EXISTS idx_alerts_park_name
+        ON alerts(park_name);
 
-      CREATE INDEX IF NOT EXISTS idx_alerts_status
-        ON alerts(alert_status);
+      CREATE INDEX IF NOT EXISTS idx_alerts_park_id
+        ON alerts(park_id);
 
-      CREATE INDEX IF NOT EXISTS idx_alerts_type
-        ON alerts(alert_type);
+      CREATE INDEX IF NOT EXISTS idx_alerts_category
+        ON alerts(alert_category);
 
       CREATE INDEX IF NOT EXISTS idx_alerts_dates
         ON alerts(start_date, end_date);
 
+      CREATE INDEX IF NOT EXISTS idx_reserves_name
+        ON reserves(name);
+
       CREATE INDEX IF NOT EXISTS idx_reserves_name_short
         ON reserves(name_short);
-
-      CREATE INDEX IF NOT EXISTS idx_reserves_reserve_id
-        ON reserves(reserve_id);
 
       CREATE INDEX IF NOT EXISTS idx_sync_history_type
         ON sync_history(sync_type, started_at);

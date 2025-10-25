@@ -2,27 +2,43 @@
  * NPWS Alerts API Response Types
  */
 
+// Park information
+export interface NPWSPark {
+  Name: string;
+  Url: string;
+  Id: string;
+  ItemName: string;
+}
+
 // Alert from NPWS API
 export interface NPWSAlert {
-  AlertID: number;
-  ReserveID: number;
-  AlertTitle: string;
-  AlertDescription: string;
-  AlertType: string;
-  AlertStatus: string;
-  StartDate: string;
-  EndDate: string | null;
-  LastModified: string;
-  // Add more fields as discovered from API
-  [key: string]: any;
+  ID: string;
+  EffectiveFrom: string;
+  EffectiveTo: string | null;
+  LastReviewed: string;
+  Title: string;
+  ItemName: string | null;
+  Category: string;
+  DescriptionHtml: string;
+  IsKml: boolean;
+}
+
+// Park with alerts
+export interface NPWSParkAlert {
+  Park: NPWSPark;
+  Closed: boolean;
+  PartClosed: boolean;
+  ClosedAreasCount: number;
+  LastReviewed: string;
+  EffectiveFrom: string;
+  Categories: string[];
+  Alerts: NPWSAlert[];
 }
 
 // API Response wrapper
 export interface AlertsAPIResponse {
-  Alerts: NPWSAlert[];
-  TotalCount: number;
-  // Add more fields as discovered from API
-  [key: string]: any;
+  Categories: string[];
+  ParkAlerts: NPWSParkAlert[];
 }
 
 /**
@@ -81,16 +97,19 @@ export interface ArcGISQueryResponse {
 // Alert stored in database
 export interface AlertRecord {
   id?: number;
-  alert_id: number;
-  reserve_id: number;
+  alert_id: string;
+  park_name: string;
+  park_id: string;
+  reserve_id: number | null;
   alert_title: string;
   alert_description: string;
-  alert_type: string;
-  alert_status: string;
+  alert_category: string;
   start_date: string;
   end_date: string | null;
-  last_modified: string;
-  is_future: boolean; // 0 for current, 1 for future
+  last_reviewed: string;
+  park_closed: number;
+  park_part_closed: number;
+  is_future: number; // 0 for current, 1 for future
   created_at: string;
   updated_at: string;
   raw_data: string; // JSON string of full API response
@@ -100,10 +119,13 @@ export interface AlertRecord {
 export interface ReserveRecord {
   id?: number;
   object_id: number;
+  name: string;
   name_short: string;
-  name_long: string | null;
-  reserve_id: number | null;
-  area_ha: number | null;
+  location: string | null;
+  reserve_type: string | null;
+  reserve_no: string | null;
+  gaz_area: number | null;
+  gis_area: number | null;
   gazettal_date: string | null;
   geometry_type: string | null;
   created_at: string;
