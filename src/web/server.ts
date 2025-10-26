@@ -23,10 +23,15 @@ app.use(express.static(path.join(__dirname, '../../public')));
 // Get all alerts with optional filtering
 app.get('/api/alerts', (req, res) => {
   try {
-    const { category, is_future, park_name } = req.query;
+    const { category, is_future, park_name, include_inactive } = req.query;
 
     let query = 'SELECT * FROM alerts WHERE 1=1';
     const params: any[] = [];
+
+    // Filter by is_active unless explicitly requested to include inactive
+    if (include_inactive !== 'true') {
+      query += ' AND is_active = 1';
+    }
 
     if (category) {
       query += ' AND alert_category = ?';
@@ -65,7 +70,7 @@ app.get('/api/alerts', (req, res) => {
 // Get alerts with reserve information (for mapping)
 app.get('/api/alerts/with-reserves', (req, res) => {
   try {
-    const { category, is_future } = req.query;
+    const { category, is_future, include_inactive } = req.query;
 
     let query = `
       SELECT
@@ -84,6 +89,11 @@ app.get('/api/alerts/with-reserves', (req, res) => {
       WHERE 1=1
     `;
     const params: any[] = [];
+
+    // Filter by is_active unless explicitly requested to include inactive
+    if (include_inactive !== 'true') {
+      query += ' AND a.is_active = 1';
+    }
 
     if (category) {
       query += ' AND a.alert_category = ?';
@@ -120,7 +130,7 @@ app.get('/api/alerts/categories', (req, res) => {
     const stmt = db['db'].prepare(`
       SELECT DISTINCT alert_category
       FROM alerts
-      WHERE alert_category IS NOT NULL
+      WHERE alert_category IS NOT NULL AND is_active = 1
       ORDER BY alert_category
     `);
     const categories = stmt.all();
@@ -247,10 +257,11 @@ app.get('/api/stats', (req, res) => {
   try {
     const stats = db.getStats();
 
-    // Get category breakdown
+    // Get category breakdown (only active alerts)
     const categoryStmt = db['db'].prepare(`
       SELECT alert_category, COUNT(*) as count
       FROM alerts
+      WHERE is_active = 1
       GROUP BY alert_category
       ORDER BY count DESC
     `);

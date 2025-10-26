@@ -159,6 +159,10 @@ export class DataProcessor {
 
     console.log('Syncing alerts data...');
 
+    // Mark all existing alerts as inactive before syncing
+    // Alerts that are still active in the API will be re-activated during upsert
+    this.db.markAllAlertsInactive();
+
     const { current, future } = await this.alertsFetcher.fetchAllAlerts();
 
     // Process current alerts
@@ -230,6 +234,7 @@ export class DataProcessor {
           park_closed: alert.ParkClosed ? 1 : 0,
           park_part_closed: alert.ParkPartClosed ? 1 : 0,
           is_future: isFuture ? 1 : 0,
+          is_active: 1, // Mark as active since it's from current API response
         };
 
         alertRecords.push(alertRecord);

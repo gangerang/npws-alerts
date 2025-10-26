@@ -40,11 +40,11 @@ export class NPWSDatabase {
       INSERT INTO alerts (
         alert_id, park_name, park_id, alert_title, alert_description,
         alert_category, start_date, end_date, last_reviewed,
-        park_closed, park_part_closed, is_future
+        park_closed, park_part_closed, is_future, is_active
       ) VALUES (
         @alert_id, @park_name, @park_id, @alert_title, @alert_description,
         @alert_category, @start_date, @end_date, @last_reviewed,
-        @park_closed, @park_part_closed, @is_future
+        @park_closed, @park_part_closed, @is_future, @is_active
       )
       ON CONFLICT(alert_id, is_future) DO UPDATE SET
         park_name = @park_name,
@@ -57,10 +57,25 @@ export class NPWSDatabase {
         last_reviewed = @last_reviewed,
         park_closed = @park_closed,
         park_part_closed = @park_part_closed,
+        is_active = @is_active,
         updated_at = CURRENT_TIMESTAMP
     `);
 
     stmt.run(alert);
+  }
+
+  /**
+   * Mark all alerts as inactive
+   */
+  public markAllAlertsInactive(): void {
+    const stmt = this.db.prepare(`
+      UPDATE alerts
+      SET is_active = 0, updated_at = CURRENT_TIMESTAMP
+      WHERE is_active = 1
+    `);
+
+    const result = stmt.run();
+    console.log(`Marked ${result.changes} alerts as inactive`);
   }
 
   /**
@@ -126,7 +141,7 @@ export class NPWSDatabase {
   public getActiveAlerts(isFuture: boolean = false): AlertRecord[] {
     const stmt = this.db.prepare(`
       SELECT * FROM alerts
-      WHERE is_future = ?
+      WHERE is_future = ? AND is_active = 1
       ORDER BY start_date DESC
     `);
 
@@ -139,7 +154,7 @@ export class NPWSDatabase {
   public getAlertsByParkName(parkName: string, isFuture: boolean = false): AlertRecord[] {
     const stmt = this.db.prepare(`
       SELECT * FROM alerts
-      WHERE park_name = ? AND is_future = ?
+      WHERE park_name = ? AND is_future = ? AND is_active = 1
       ORDER BY start_date DESC
     `);
 
@@ -217,7 +232,7 @@ export class NPWSDatabase {
     const stmt = this.db.prepare(`
       SELECT a.* FROM alerts a
       LEFT JOIN park_mappings pm ON a.park_id = pm.park_id
-      WHERE pm.park_id IS NULL AND a.is_future = ?
+      WHERE pm.park_id IS NULL AND a.is_future = ? AND a.is_active = 1
       ORDER BY a.park_name
     `);
 
@@ -235,7 +250,7 @@ export class NPWSDatabase {
         COUNT(*) as alert_count
       FROM alerts a
       LEFT JOIN park_mappings pm ON a.park_id = pm.park_id
-      WHERE pm.park_id IS NULL
+      WHERE pm.park_id IS NULL AND a.is_active = 1
       GROUP BY a.park_id, a.park_name
       ORDER BY a.park_name
     `);
@@ -261,7 +276,7 @@ export class NPWSDatabase {
       FROM alerts a
       LEFT JOIN park_mappings pm ON a.park_id = pm.park_id
       LEFT JOIN reserves r ON pm.object_id = r.object_id
-      WHERE a.is_future = ?
+      WHERE a.is_future = ? AND a.is_active = 1
       ORDER BY a.start_date DESC
     `);
 
@@ -334,7 +349,7 @@ export class NPWSDatabase {
    * Get database statistics
    */
   public getStats(): { alerts: number; reserves: number; lastSync: string | null } {
-    const alertCount = this.db.prepare('SELECT COUNT(*) as count FROM alerts').get() as { count: number };
+    const alertCount = this.db.prepare('SELECT COUNT(*) as count FROM alerts WHERE is_active = 1').get() as { count: number };
     const reserveCount = this.db.prepare('SELECT COUNT(*) as count FROM reserves').get() as { count: number };
     const lastSync = this.db.prepare(
       "SELECT started_at FROM sync_history WHERE sync_status = 'completed' ORDER BY started_at DESC LIMIT 1"

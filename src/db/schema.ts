@@ -69,6 +69,7 @@ export class DatabaseSchema {
         park_closed INTEGER NOT NULL DEFAULT 0,
         park_part_closed INTEGER NOT NULL DEFAULT 0,
         is_future INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(alert_id, is_future)
@@ -164,6 +165,9 @@ export class DatabaseSchema {
 
       CREATE INDEX IF NOT EXISTS idx_alerts_dates
         ON alerts(start_date, end_date);
+
+      CREATE INDEX IF NOT EXISTS idx_alerts_is_active
+        ON alerts(is_active);
 
       CREATE INDEX IF NOT EXISTS idx_reserves_name
         ON reserves(name);

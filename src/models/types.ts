@@ -109,6 +109,7 @@ export interface AlertRecord {
   park_closed: number;
   park_part_closed: number;
   is_future: number; // 0 for current, 1 for future
+  is_active: number; // 0 for inactive, 1 for active
   created_at: string;
   updated_at: string;
 }
