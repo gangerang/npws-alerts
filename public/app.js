@@ -133,15 +133,19 @@ async function loadAlerts() {
         if (result.success) {
             allAlerts = result.data;
 
+            // Populate park autocomplete
+            populateParkAutocomplete(allAlerts);
+
             // Apply search filter on client side
+            let displayedAlerts = allAlerts;
             if (currentFilters.search) {
                 const searchLower = currentFilters.search.toLowerCase();
-                allAlerts = allAlerts.filter(alert =>
+                displayedAlerts = allAlerts.filter(alert =>
                     alert.park_name.toLowerCase().includes(searchLower)
                 );
             }
 
-            displayAlerts(allAlerts);
+            displayAlerts(displayedAlerts);
             console.log(`Loaded ${allAlerts.length} alerts`);
         }
     } catch (error) {
@@ -257,6 +261,44 @@ function loadParkBoundaries(alerts) {
     }).addTo(boundariesLayer);
 
     console.log(`Park boundaries loaded as raster tiles (${reserveObjectIds.length} reserves filtered)`);
+}
+
+/**
+ * Setup filter toggle for mobile
+ */
+function setupFilterToggle() {
+    const toggleBtn = document.getElementById('filter-toggle');
+    const advancedFilters = document.getElementById('advanced-filters');
+
+    if (!toggleBtn || !advancedFilters) {
+        return; // Elements not found
+    }
+
+    // Start with advanced filters collapsed on mobile
+    if (window.innerWidth <= 768) {
+        advancedFilters.classList.add('collapsed');
+    }
+
+    toggleBtn.addEventListener('click', function() {
+        advancedFilters.classList.toggle('collapsed');
+
+        // Optional: animate the toggle button (rotate hamburger icon)
+        toggleBtn.classList.toggle('active');
+    });
+
+    // Handle window resize - show advanced filters on desktop
+    window.addEventListener('resize', function() {
+        if (window.innerWidth > 768) {
+            advancedFilters.classList.remove('collapsed');
+        } else {
+            // On mobile, keep collapsed state
+            if (!advancedFilters.classList.contains('collapsed')) {
+                // Only auto-collapse if user hasn't manually opened it
+            }
+        }
+    });
+
+    console.log('Filter toggle initialized');
 }
 
 /**
@@ -395,12 +437,25 @@ function createPopupContent(parkName, alerts) {
     const parkId = alerts[0].park_id;
     window[`alerts_${parkId}`] = alerts;
 
+    // For parks with many alerts, show compact view
+    const maxAlertsToShow = 5;
+    const showingAll = alertCount <= maxAlertsToShow;
+    const alertsToDisplay = showingAll ? alerts : alerts.slice(0, maxAlertsToShow);
+    const remainingCount = alertCount - maxAlertsToShow;
+
     return `
         <div class="popup-content">
             <div class="popup-title">${parkName}</div>
-            <div class="popup-park">${alertCount} alert${alertCount > 1 ? 's' : ''}</div>
+            <div class="popup-subtitle">${alertCount} alert${alertCount > 1 ? 's' : ''}</div>
+
+            ${!showingAll ? `
+                <button class="popup-view-all-btn" onclick="showParkAlerts('${parkId}', 0)">
+                    View All Alerts →
+                </button>
+            ` : ''}
+
             <div class="popup-alerts-list">
-                ${alerts.map((alert, index) => `
+                ${alertsToDisplay.map((alert, index) => `
                     <div class="popup-alert-item" onclick="showParkAlerts('${parkId}', ${index})">
                         <div class="popup-alert-icon ${getAlertIconClass(alert)}">!</div>
                         <div class="popup-alert-content">
@@ -409,6 +464,12 @@ function createPopupContent(parkName, alerts) {
                         </div>
                     </div>
                 `).join('')}
+
+                ${!showingAll ? `
+                    <div class="popup-more-alerts" onclick="showParkAlerts('${parkId}', 0)">
+                        ...and ${remainingCount} more
+                    </div>
+                ` : ''}
             </div>
         </div>
     `;
@@ -579,14 +640,69 @@ function hideDetails() {
 }
 
 /**
- * Apply current filters
+ * Auto-apply category filter
  */
-function applyFilters() {
+function onCategoryChange() {
     currentFilters.category = document.getElementById('category-filter').value;
-    currentFilters.time = document.getElementById('time-filter').value;
-    currentFilters.search = document.getElementById('search-input').value;
-
     loadAlerts();
+}
+
+/**
+ * Auto-apply time filter
+ */
+function onTimeChange() {
+    currentFilters.time = document.getElementById('time-filter').value;
+    loadAlerts();
+}
+
+/**
+ * Debounced search handler for client-side filtering
+ */
+let searchDebounceTimer;
+function onSearchInput() {
+    const searchValue = document.getElementById('search-input').value;
+
+    // Debounce search to avoid filtering on every keystroke
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+        currentFilters.search = searchValue;
+
+        // Apply search filter client-side (already loaded alerts)
+        if (!allAlerts || allAlerts.length === 0) return;
+
+        let filtered = allAlerts;
+        if (searchValue) {
+            const searchLower = searchValue.toLowerCase();
+            filtered = allAlerts.filter(alert =>
+                alert.park_name.toLowerCase().includes(searchLower)
+            );
+        }
+
+        displayAlerts(filtered);
+    }, 300); // 300ms debounce
+}
+
+/**
+ * Populate park autocomplete datalist
+ */
+function populateParkAutocomplete(alerts) {
+    const datalist = document.getElementById('park-names');
+    if (!datalist) return;
+
+    // Extract unique park names
+    const parkNames = [...new Set(alerts.map(a => a.park_name))].sort();
+
+    // Clear existing options
+    datalist.innerHTML = '';
+
+    // Add options
+    parkNames.forEach(name => {
+        const option = document.createElement('option');
+        option.value = name;
+        datalist.appendChild(option);
+    });
+
+    console.log(`Populated autocomplete with ${parkNames.length} park names`);
 }
 
 /**
@@ -626,16 +742,14 @@ async function init() {
     ]);
 
     // Setup event listeners
-    document.getElementById('apply-filters').addEventListener('click', applyFilters);
+    document.getElementById('category-filter').addEventListener('change', onCategoryChange);
+    document.getElementById('time-filter').addEventListener('change', onTimeChange);
+    document.getElementById('search-input').addEventListener('input', onSearchInput);
     document.getElementById('clear-filters').addEventListener('click', clearFilters);
     document.getElementById('close-details').addEventListener('click', hideDetails);
 
-    // Allow Enter key to apply filters
-    document.getElementById('search-input').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            applyFilters();
-        }
-    });
+    // Setup mobile filter toggle
+    setupFilterToggle();
 
     // Setup boundary click handler for interactive park boundaries
     setupBoundaryClickHandler();

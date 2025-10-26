@@ -15,7 +15,16 @@
     <div class="container">
         <!-- Header -->
         <header class="header">
-            <h1>NSW National Parks Alerts</h1>
+            <div class="header-content">
+                <h1>NSW National Parks Alerts</h1>
+                <button class="filter-toggle" id="filter-toggle" aria-label="Toggle filters">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="4" y1="6" x2="20" y2="6"></line>
+                        <line x1="4" y1="12" x2="20" y2="12"></line>
+                        <line x1="4" y1="18" x2="20" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
             <div class="stats" id="stats">
                 <span class="stat-item">Loading...</span>
             </div>
@@ -23,29 +32,35 @@
 
         <!-- Controls Panel -->
         <div class="controls-panel">
-            <div class="control-group">
-                <label for="category-filter">Category:</label>
-                <select id="category-filter">
-                    <option value="">All Categories</option>
-                </select>
+            <!-- Quick Access Bar (always visible on mobile) -->
+            <div class="quick-filters">
+                <div class="control-group">
+                    <label for="category-filter">Category:</label>
+                    <select id="category-filter">
+                        <option value="">All Categories</option>
+                    </select>
+                </div>
             </div>
 
-            <div class="control-group">
-                <label for="time-filter">Time:</label>
-                <select id="time-filter">
-                    <option value="current">Current Alerts</option>
-                    <option value="future">Future Alerts</option>
-                    <option value="all">All Alerts</option>
-                </select>
-            </div>
+            <!-- Advanced Filters (collapsible on mobile) -->
+            <div class="advanced-filters" id="advanced-filters">
+                <div class="control-group">
+                    <label for="time-filter">Time:</label>
+                    <select id="time-filter">
+                        <option value="current">Current Alerts</option>
+                        <option value="future">Future Alerts</option>
+                        <option value="all">All Alerts</option>
+                    </select>
+                </div>
 
-            <div class="control-group">
-                <label for="search-input">Search Park:</label>
-                <input type="text" id="search-input" placeholder="Enter park name...">
-            </div>
+                <div class="control-group">
+                    <label for="search-input">Search Park:</label>
+                    <input type="text" id="search-input" list="park-names" placeholder="Enter park name...">
+                    <datalist id="park-names"></datalist>
+                </div>
 
-            <button id="apply-filters" class="btn-primary">Apply Filters</button>
-            <button id="clear-filters" class="btn-secondary">Clear</button>
+                <button id="clear-filters" class="btn-secondary">Clear Filters</button>
+            </div>
         </div>
 
         <!-- Map Container -->
