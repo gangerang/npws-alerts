@@ -100,7 +100,6 @@ export interface AlertRecord {
   alert_id: string;
   park_name: string;
   park_id: string;
-  reserve_id: number | null;
   alert_title: string;
   alert_description: string;
   alert_category: string;
@@ -112,7 +111,6 @@ export interface AlertRecord {
   is_future: number; // 0 for current, 1 for future
   created_at: string;
   updated_at: string;
-  raw_data: string; // JSON string of full API response
 }
 
 // Reserve stored in database
@@ -127,10 +125,21 @@ export interface ReserveRecord {
   gaz_area: number | null;
   gis_area: number | null;
   gazettal_date: string | null;
-  geometry_type: string | null;
+  centroid_lat: number | null;
+  centroid_lon: number | null;
   created_at: string;
   updated_at: string;
-  raw_data: string; // JSON string of full feature data
+}
+
+// Park mapping stored in database
+export interface ParkMappingRecord {
+  id?: number;
+  park_id: string;
+  park_name: string;
+  object_id: number;
+  reserve_name: string;
+  created_at: string;
+  updated_at: string;
 }
 
 /**

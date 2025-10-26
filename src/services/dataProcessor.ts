@@ -96,7 +96,6 @@ export class DataProcessor {
     for (const feature of result.data) {
       try {
         const attrs = feature.attributes;
-        const geometry = feature.geometry;
 
         // Format gazettal date if available (comes as Unix timestamp in milliseconds)
         let gazDate: string | null = null;
@@ -108,6 +107,9 @@ export class DataProcessor {
           }
         }
 
+        // Extract centroid
+        const centroid = this.geoDataFetcher.getCentroid(feature);
+
         const reserve: Omit<ReserveRecord, 'id' | 'created_at' | 'updated_at'> = {
           object_id: attrs.OBJECTID_1 || attrs.OBJECTID,
           name: attrs.NAME || '',
@@ -118,8 +120,8 @@ export class DataProcessor {
           gaz_area: attrs.GAZ_AREA || null,
           gis_area: attrs.GIS_AREA || null,
           gazettal_date: gazDate,
-          geometry_type: this.geoDataFetcher.getGeometryType(geometry),
-          raw_data: JSON.stringify(feature),
+          centroid_lat: centroid?.lat || null,
+          centroid_lon: centroid?.lon || null,
         };
 
         reserves.push(reserve);
@@ -193,18 +195,32 @@ export class DataProcessor {
         // The alert now includes Park information
         const park = alert.Park;
 
-        // Try to find matching reserve by name
-        let reserve_id: number | null = null;
-        const reserve = this.db.getReserveByName(park.Name);
-        if (reserve) {
-          reserve_id = reserve.object_id;
+        // Check if park mapping already exists
+        let mapping = this.db.getParkMapping(park.Id);
+
+        if (!mapping) {
+          // Try to find matching reserve by name (case-insensitive)
+          const reserve = this.db.getReserveByName(park.Name);
+
+          if (reserve) {
+            // Create new park mapping
+            this.db.upsertParkMapping({
+              park_id: park.Id,
+              park_name: park.Name,
+              object_id: reserve.object_id,
+              reserve_name: reserve.name,
+            });
+            console.log(`Created mapping: "${park.Name}" -> "${reserve.name}" (ID: ${reserve.object_id})`);
+          } else {
+            // No matching reserve found - alert will be unmapped
+            console.log(`No reserve match found for park: "${park.Name}" (ID: ${park.Id})`);
+          }
         }
 
         const alertRecord: Omit<AlertRecord, 'id' | 'created_at' | 'updated_at'> = {
           alert_id: alert.ID,
           park_name: park.Name,
           park_id: park.Id,
-          reserve_id: reserve_id,
           alert_title: alert.Title,
           alert_description: alert.DescriptionHtml || '',
           alert_category: alert.Category,
@@ -214,7 +230,6 @@ export class DataProcessor {
           park_closed: alert.ParkClosed ? 1 : 0,
           park_part_closed: alert.ParkPartClosed ? 1 : 0,
           is_future: isFuture ? 1 : 0,
-          raw_data: JSON.stringify(alert),
         };
 
         alertRecords.push(alertRecord);
@@ -256,43 +271,34 @@ export class DataProcessor {
   }
 
   /**
-   * Export alerts and reserves as GeoJSON
+   * Export alerts and reserves as GeoJSON (using centroids only)
    */
   public exportAsGeoJSON(): any {
     const alertsWithReserves = this.db.getAlertsWithReserves(false);
-    const reserves = this.db.getAllReserves();
 
     // Create GeoJSON FeatureCollection
-    const features = alertsWithReserves.map((alert: any) => {
-      // Try to find reserve with geometry by matching object_id
-      const reserve = reserves.find(r => r.object_id === alert.reserve_id);
-
-      let geometry = null;
-      if (reserve && reserve.raw_data) {
-        try {
-          const reserveData = JSON.parse(reserve.raw_data);
-          geometry = reserveData.geometry || null;
-        } catch (e) {
-          console.error('Error parsing reserve geometry:', e);
-        }
-      }
-
-      return {
-        type: 'Feature',
-        properties: {
-          alert_id: alert.alert_id,
-          alert_title: alert.alert_title,
-          alert_description: alert.alert_description,
-          alert_type: alert.alert_type,
-          alert_status: alert.alert_status,
-          start_date: alert.start_date,
-          end_date: alert.end_date,
-          reserve_name_short: alert.reserve_name_short,
-          reserve_name_long: alert.reserve_name_long,
-        },
-        geometry: geometry,
-      };
-    });
+    const features = alertsWithReserves
+      .filter((alert: any) => alert.centroid_lat && alert.centroid_lon)
+      .map((alert: any) => {
+        return {
+          type: 'Feature',
+          properties: {
+            alert_id: alert.alert_id,
+            alert_title: alert.alert_title,
+            alert_description: alert.alert_description,
+            alert_category: alert.alert_category,
+            park_name: alert.park_name,
+            start_date: alert.start_date,
+            end_date: alert.end_date,
+            reserve_name: alert.reserve_name,
+            reserve_name_short: alert.reserve_name_short,
+          },
+          geometry: {
+            type: 'Point',
+            coordinates: [alert.centroid_lon, alert.centroid_lat],
+          },
+        };
+      });
 
     return {
       type: 'FeatureCollection',

@@ -1,7 +1,9 @@
 // Global variables
 let map;
 let markersLayer;
+let boundariesLayer;
 let allAlerts = [];
+let arcgisServiceUrl = '';
 let currentFilters = {
     category: '',
     time: 'current',
@@ -39,7 +41,27 @@ function initMap() {
     // Create layer for markers
     markersLayer = L.layerGroup().addTo(map);
 
+    // Create layer for boundaries
+    boundariesLayer = L.layerGroup().addTo(map);
+
     console.log('Map initialized');
+}
+
+/**
+ * Load configuration from API
+ */
+async function loadConfig() {
+    try {
+        const response = await fetch(`${API_BASE}/api/config`);
+        const result = await response.json();
+
+        if (result.success) {
+            arcgisServiceUrl = result.data.arcgisServiceUrl;
+            console.log('Config loaded:', arcgisServiceUrl);
+        }
+    } catch (error) {
+        console.error('Error loading config:', error);
+    }
 }
 
 /**
@@ -145,50 +167,80 @@ function displayAlerts(alerts) {
     Object.entries(alertsByPark).forEach(([parkName, parkAlerts]) => {
         const firstAlert = parkAlerts[0];
 
-        // Try to get coordinates from reserve data
-        let lat, lon;
-
-        // First try to get from geometry
-        if (firstAlert.geometry && firstAlert.geometry.rings && firstAlert.geometry.rings.length > 0) {
-            // Calculate centroid from polygon
-            const coords = calculateCentroid(firstAlert.geometry.rings[0]);
-            lon = coords[0];
-            lat = coords[1];
-        } else if (firstAlert.geometry && firstAlert.geometry.x && firstAlert.geometry.y) {
-            // Point geometry
-            lon = firstAlert.geometry.x;
-            lat = firstAlert.geometry.y;
-        }
+        // Get coordinates from centroid (directly from reserve data)
+        const lat = firstAlert.centroid_lat;
+        const lon = firstAlert.centroid_lon;
 
         // If we have coordinates, create a marker
         if (lat && lon) {
-            createMarker(lat, lon, parkName, parkAlerts);
+            createMarker(lat, lon, parkName, parkAlerts, firstAlert.reserve_object_id);
         } else {
-            console.warn(`No coordinates for ${parkName}`);
+            console.warn(`No coordinates for ${parkName} (no mapping to reserve)`);
         }
     });
 
     console.log(`Displayed ${Object.keys(alertsByPark).length} park locations`);
+
+    // Load park boundaries for alerts with mapped reserves
+    loadParkBoundaries(alerts);
 }
 
 /**
- * Calculate centroid from polygon coordinates
+ * Load park boundaries from ArcGIS service
  */
-function calculateCentroid(coords) {
-    let sumX = 0, sumY = 0, count = coords.length;
+function loadParkBoundaries(alerts) {
+    // Clear existing boundaries
+    boundariesLayer.clearLayers();
 
-    coords.forEach(coord => {
-        sumX += coord[0];
-        sumY += coord[1];
-    });
+    if (!arcgisServiceUrl || !window.L.esri) {
+        console.warn('ArcGIS service not configured or esri-leaflet not loaded');
+        return;
+    }
 
-    return [sumX / count, sumY / count];
+    // Get unique reserve object IDs from alerts that have mappings
+    const reserveObjectIds = [...new Set(
+        alerts
+            .filter(alert => alert.reserve_object_id)
+            .map(alert => alert.reserve_object_id)
+    )];
+
+    if (reserveObjectIds.length === 0) {
+        console.log('No mapped reserves to display boundaries for');
+        return;
+    }
+
+    console.log(`Loading boundaries for ${reserveObjectIds.length} reserves...`);
+
+    // Create a feature layer from the ArcGIS service
+    // Filter to only show parks with current alerts
+    const whereClause = `OBJECTID_1 IN (${reserveObjectIds.join(',')})`;
+
+    L.esri.featureLayer({
+        url: arcgisServiceUrl,
+        where: whereClause,
+        style: function() {
+            return {
+                color: '#3388ff',
+                weight: 2,
+                opacity: 0.6,
+                fillOpacity: 0.1
+            };
+        },
+        onEachFeature: function(feature, layer) {
+            // Add popup with park name
+            if (feature.properties.NAME) {
+                layer.bindPopup(`<strong>${feature.properties.NAME}</strong>`);
+            }
+        }
+    }).addTo(boundariesLayer);
+
+    console.log('Park boundaries loaded');
 }
 
 /**
  * Create a marker for a park with alerts
  */
-function createMarker(lat, lon, parkName, alerts) {
+function createMarker(lat, lon, parkName, alerts, reserveObjectId) {
     // Determine marker color based on alert severity
     const hasClosedPark = alerts.some(a => a.park_closed);
     const hasFireBan = alerts.some(a => a.alert_category === 'Fire bans');
@@ -384,6 +436,9 @@ async function init() {
 
     // Initialize map
     initMap();
+
+    // Load configuration first
+    await loadConfig();
 
     // Load data
     await Promise.all([

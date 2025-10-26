@@ -19,6 +19,7 @@ export class DatabaseSchema {
     // Create tables
     this.createAlertsTable();
     this.createReservesTable();
+    this.createParkMappingsTable();
     this.createSyncHistoryTable();
 
     // Create indexes
@@ -59,7 +60,6 @@ export class DatabaseSchema {
         alert_id TEXT NOT NULL,
         park_name TEXT NOT NULL,
         park_id TEXT NOT NULL,
-        reserve_id INTEGER,
         alert_title TEXT NOT NULL,
         alert_description TEXT,
         alert_category TEXT,
@@ -71,7 +71,6 @@ export class DatabaseSchema {
         is_future INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        raw_data TEXT,
         UNIQUE(alert_id, is_future)
       )
     `);
@@ -80,7 +79,7 @@ export class DatabaseSchema {
   }
 
   /**
-   * Create reserves table with geometry support
+   * Create reserves table
    */
   private createReservesTable(): void {
     this.db.exec(`
@@ -95,17 +94,34 @@ export class DatabaseSchema {
         gaz_area REAL,
         gis_area REAL,
         gazettal_date TEXT,
-        geometry_type TEXT,
-        geometry_wkt TEXT,
         centroid_lat REAL,
         centroid_lon REAL,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        raw_data TEXT
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
     console.log('Created reserves table');
+  }
+
+  /**
+   * Create park mappings table
+   */
+  private createParkMappingsTable(): void {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS park_mappings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        park_id TEXT NOT NULL UNIQUE,
+        park_name TEXT NOT NULL,
+        object_id INTEGER NOT NULL,
+        reserve_name TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (object_id) REFERENCES reserves(object_id)
+      )
+    `);
+
+    console.log('Created park_mappings table');
   }
 
   /**
@@ -155,6 +171,12 @@ export class DatabaseSchema {
       CREATE INDEX IF NOT EXISTS idx_reserves_name_short
         ON reserves(name_short);
 
+      CREATE INDEX IF NOT EXISTS idx_park_mappings_park_id
+        ON park_mappings(park_id);
+
+      CREATE INDEX IF NOT EXISTS idx_park_mappings_object_id
+        ON park_mappings(object_id);
+
       CREATE INDEX IF NOT EXISTS idx_sync_history_type
         ON sync_history(sync_type, started_at);
     `);
@@ -168,6 +190,7 @@ export class DatabaseSchema {
   public dropAllTables(): void {
     this.db.exec(`
       DROP TABLE IF EXISTS alerts;
+      DROP TABLE IF EXISTS park_mappings;
       DROP TABLE IF EXISTS reserves;
       DROP TABLE IF EXISTS sync_history;
     `);

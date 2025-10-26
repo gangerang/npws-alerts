@@ -75,10 +75,12 @@ app.get('/api/alerts/with-reserves', (req, res) => {
         r.location as reserve_location,
         r.reserve_type as reserve_type,
         r.gis_area as reserve_area,
-        r.geometry_type as reserve_geometry_type,
-        r.raw_data as reserve_raw_data
+        r.centroid_lat,
+        r.centroid_lon,
+        r.object_id as reserve_object_id
       FROM alerts a
-      LEFT JOIN reserves r ON a.park_name = r.name OR a.park_name = r.name_short
+      LEFT JOIN park_mappings pm ON a.park_id = pm.park_id
+      LEFT JOIN reserves r ON pm.object_id = r.object_id
       WHERE 1=1
     `;
     const params: any[] = [];
@@ -98,29 +100,10 @@ app.get('/api/alerts/with-reserves', (req, res) => {
     const stmt = db['db'].prepare(query);
     const alerts = stmt.all(...params);
 
-    // Parse reserve geometry if available
-    const alertsWithGeometry = alerts.map((alert: any) => {
-      let geometry = null;
-      if (alert.reserve_raw_data) {
-        try {
-          const reserveData = JSON.parse(alert.reserve_raw_data);
-          geometry = reserveData.geometry || null;
-        } catch (e) {
-          // Ignore parse errors
-        }
-      }
-
-      return {
-        ...alert,
-        reserve_raw_data: undefined, // Don't send full raw data to client
-        geometry,
-      };
-    });
-
     res.json({
       success: true,
-      count: alertsWithGeometry.length,
-      data: alertsWithGeometry,
+      count: alerts.length,
+      data: alerts,
     });
   } catch (error) {
     console.error('Error fetching alerts with reserves:', error);
@@ -200,6 +183,46 @@ app.get('/api/reserves/:name', (req, res) => {
   }
 });
 
+// Get unmapped alerts (alerts without a park mapping)
+app.get('/api/unmapped-alerts', (req, res) => {
+  try {
+    const { is_future } = req.query;
+    const isFuture = is_future === 'true';
+
+    const unmappedAlerts = db.getUnmappedAlerts(isFuture);
+
+    res.json({
+      success: true,
+      count: unmappedAlerts.length,
+      data: unmappedAlerts,
+    });
+  } catch (error) {
+    console.error('Error fetching unmapped alerts:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch unmapped alerts',
+    });
+  }
+});
+
+// Get configuration (for frontend to access ArcGIS URLs, etc.)
+app.get('/api/config', (req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: {
+        arcgisServiceUrl: config.geoDataUrl,
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching config:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch config',
+    });
+  }
+});
+
 // Get database statistics
 app.get('/api/stats', (req, res) => {
   try {
@@ -248,8 +271,10 @@ app.listen(PORT, () => {
   console.log('  GET  /api/alerts                 - Get all alerts');
   console.log('  GET  /api/alerts/with-reserves   - Get alerts with reserve data');
   console.log('  GET  /api/alerts/categories      - Get unique categories');
+  console.log('  GET  /api/unmapped-alerts        - Get unmapped alerts');
   console.log('  GET  /api/reserves               - Get all reserves');
   console.log('  GET  /api/reserves/:name         - Get reserve by name');
+  console.log('  GET  /api/config                 - Get configuration');
   console.log('  GET  /api/stats                  - Get database statistics');
   console.log('='.repeat(60));
 });

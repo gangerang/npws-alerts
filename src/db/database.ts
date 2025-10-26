@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import { DatabaseSchema } from './schema';
-import { AlertRecord, ReserveRecord, ProcessingStats } from '../models/types';
+import { AlertRecord, ReserveRecord, ParkMappingRecord, ProcessingStats } from '../models/types';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -38,18 +38,17 @@ export class NPWSDatabase {
   public upsertAlert(alert: Omit<AlertRecord, 'id' | 'created_at' | 'updated_at'>): void {
     const stmt = this.db.prepare(`
       INSERT INTO alerts (
-        alert_id, park_name, park_id, reserve_id, alert_title, alert_description,
+        alert_id, park_name, park_id, alert_title, alert_description,
         alert_category, start_date, end_date, last_reviewed,
-        park_closed, park_part_closed, is_future, raw_data
+        park_closed, park_part_closed, is_future
       ) VALUES (
-        @alert_id, @park_name, @park_id, @reserve_id, @alert_title, @alert_description,
+        @alert_id, @park_name, @park_id, @alert_title, @alert_description,
         @alert_category, @start_date, @end_date, @last_reviewed,
-        @park_closed, @park_part_closed, @is_future, @raw_data
+        @park_closed, @park_part_closed, @is_future
       )
       ON CONFLICT(alert_id, is_future) DO UPDATE SET
         park_name = @park_name,
         park_id = @park_id,
-        reserve_id = @reserve_id,
         alert_title = @alert_title,
         alert_description = @alert_description,
         alert_category = @alert_category,
@@ -58,7 +57,6 @@ export class NPWSDatabase {
         last_reviewed = @last_reviewed,
         park_closed = @park_closed,
         park_part_closed = @park_part_closed,
-        raw_data = @raw_data,
         updated_at = CURRENT_TIMESTAMP
     `);
 
@@ -86,10 +84,10 @@ export class NPWSDatabase {
     const stmt = this.db.prepare(`
       INSERT INTO reserves (
         object_id, name, name_short, location, reserve_type,
-        reserve_no, gaz_area, gis_area, gazettal_date, geometry_type, raw_data
+        reserve_no, gaz_area, gis_area, gazettal_date, centroid_lat, centroid_lon
       ) VALUES (
         @object_id, @name, @name_short, @location, @reserve_type,
-        @reserve_no, @gaz_area, @gis_area, @gazettal_date, @geometry_type, @raw_data
+        @reserve_no, @gaz_area, @gis_area, @gazettal_date, @centroid_lat, @centroid_lon
       )
       ON CONFLICT(object_id) DO UPDATE SET
         name = @name,
@@ -100,8 +98,8 @@ export class NPWSDatabase {
         gaz_area = @gaz_area,
         gis_area = @gis_area,
         gazettal_date = @gazettal_date,
-        geometry_type = @geometry_type,
-        raw_data = @raw_data,
+        centroid_lat = @centroid_lat,
+        centroid_lon = @centroid_lon,
         updated_at = CURRENT_TIMESTAMP
     `);
 
@@ -149,15 +147,15 @@ export class NPWSDatabase {
   }
 
   /**
-   * Get reserve by name
+   * Get reserve by name (case-insensitive)
    */
   public getReserveByName(name: string): ReserveRecord | undefined {
     const stmt = this.db.prepare(`
       SELECT * FROM reserves
-      WHERE name = ? OR name_short = ?
+      WHERE LOWER(name) = LOWER(?)
     `);
 
-    return stmt.get(name, name) as ReserveRecord | undefined;
+    return stmt.get(name) as ReserveRecord | undefined;
   }
 
   /**
@@ -181,6 +179,52 @@ export class NPWSDatabase {
   }
 
   /**
+   * Insert or update a park mapping
+   */
+  public upsertParkMapping(mapping: Omit<ParkMappingRecord, 'id' | 'created_at' | 'updated_at'>): void {
+    const stmt = this.db.prepare(`
+      INSERT INTO park_mappings (
+        park_id, park_name, object_id, reserve_name
+      ) VALUES (
+        @park_id, @park_name, @object_id, @reserve_name
+      )
+      ON CONFLICT(park_id) DO UPDATE SET
+        park_name = @park_name,
+        object_id = @object_id,
+        reserve_name = @reserve_name,
+        updated_at = CURRENT_TIMESTAMP
+    `);
+
+    stmt.run(mapping);
+  }
+
+  /**
+   * Get park mapping by park_id
+   */
+  public getParkMapping(parkId: string): ParkMappingRecord | undefined {
+    const stmt = this.db.prepare(`
+      SELECT * FROM park_mappings
+      WHERE park_id = ?
+    `);
+
+    return stmt.get(parkId) as ParkMappingRecord | undefined;
+  }
+
+  /**
+   * Get all unmapped alerts (alerts without a park mapping)
+   */
+  public getUnmappedAlerts(isFuture: boolean = false): AlertRecord[] {
+    const stmt = this.db.prepare(`
+      SELECT a.* FROM alerts a
+      LEFT JOIN park_mappings pm ON a.park_id = pm.park_id
+      WHERE pm.park_id IS NULL AND a.is_future = ?
+      ORDER BY a.park_name
+    `);
+
+    return stmt.all(isFuture ? 1 : 0) as AlertRecord[];
+  }
+
+  /**
    * Get alerts with their associated reserve information
    */
   public getAlertsWithReserves(isFuture: boolean = false): any[] {
@@ -192,9 +236,12 @@ export class NPWSDatabase {
         r.location as reserve_location,
         r.reserve_type as reserve_type,
         r.gis_area as reserve_area,
-        r.geometry_type as reserve_geometry_type
+        r.centroid_lat,
+        r.centroid_lon,
+        r.object_id as reserve_object_id
       FROM alerts a
-      LEFT JOIN reserves r ON a.park_name = r.name OR a.park_name = r.name_short
+      LEFT JOIN park_mappings pm ON a.park_id = pm.park_id
+      LEFT JOIN reserves r ON pm.object_id = r.object_id
       WHERE a.is_future = ?
       ORDER BY a.start_date DESC
     `);

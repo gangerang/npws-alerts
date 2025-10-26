@@ -12,13 +12,12 @@ export class GeoDataFetcher {
    */
   public async fetchAllReserves(): Promise<FetchResult<ArcGISFeature[]>> {
     try {
-      console.log('Fetching reserve geospatial data from ArcGIS...');
+      console.log('Fetching reserve data from ArcGIS (calculating centroids from geometry)...');
 
       // Fetch in batches to handle large datasets
-      // Using smaller batch size when geometry is enabled to avoid API errors
       const features: ArcGISFeature[] = [];
       let offset = 0;
-      const batchSize = 50; // Reduced from 1000 to avoid 500 errors with geometry
+      const batchSize = 100; // Moderate batch size with geometry to avoid errors
       let hasMore = true;
 
       while (hasMore) {
@@ -65,11 +64,11 @@ export class GeoDataFetcher {
   private async fetchReserveBatch(offset: number, limit: number): Promise<FetchResult<ArcGISFeature[]>> {
     try {
       // Build query URL for ArcGIS REST API
-      // Using smaller batch size (50) with geometry enabled
+      // Fetch geometry to calculate centroids, but won't store the full geometry
       const params = new URLSearchParams({
         where: '1=1', // Get all features
         outFields: '*', // Get all fields
-        returnGeometry: 'true', // Re-enabled with smaller batch size
+        returnGeometry: 'true', // Need geometry to calculate centroids
         f: 'json',
         resultOffset: offset.toString(),
         resultRecordCount: limit.toString(),
@@ -208,12 +207,21 @@ export class GeoDataFetcher {
   }
 
   /**
-   * Calculate centroid from geometry
+   * Extract centroid from feature (either from centroid property or geometry)
    */
-  public calculateCentroid(geometry: any): { lat: number; lon: number } | null {
-    if (!geometry) return null;
+  public getCentroid(feature: any): { lat: number; lon: number } | null {
+    if (!feature) return null;
 
     try {
+      // Check if feature has centroid property (from returnCentroid=true)
+      if (feature.centroid && feature.centroid.x !== undefined && feature.centroid.y !== undefined) {
+        return { lat: feature.centroid.y, lon: feature.centroid.x };
+      }
+
+      // Fallback: check geometry property
+      const geometry = feature.geometry;
+      if (!geometry) return null;
+
       // For point geometry
       if (geometry.x !== undefined && geometry.y !== undefined) {
         return { lat: geometry.y, lon: geometry.x };
@@ -239,7 +247,7 @@ export class GeoDataFetcher {
 
       return null;
     } catch (error) {
-      console.error('Error calculating centroid:', error);
+      console.error('Error extracting centroid:', error);
       return null;
     }
   }
