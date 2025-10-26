@@ -260,6 +260,81 @@ function loadParkBoundaries(alerts) {
 }
 
 /**
+ * Setup click handler for park boundaries
+ * Uses ArcGIS Identify service to make raster boundaries interactive
+ */
+function setupBoundaryClickHandler() {
+    map.on('click', function(e) {
+        // Only identify if we have boundaries loaded and ArcGIS service configured
+        if (!arcgisServiceUrl || boundariesLayer.getLayers().length === 0) {
+            return;
+        }
+
+        // Extract base MapServer URL
+        const baseMapServerUrl = arcgisServiceUrl.replace(/\/\d+$/, '');
+
+        // Use ArcGIS identify at the MapServer level, specifying layer 0
+        L.esri.identifyFeatures({
+            url: baseMapServerUrl
+        })
+        .on(map)
+        .at(e.latlng)
+        .layers('all:0')       // Query only layer 0
+        .tolerance(5)          // 5 pixel tolerance for clicking
+        .returnGeometry(false) // Don't return geometry, only attributes
+        .run(function(error, featureCollection, response) {
+            if (error) {
+                console.error('Identify error:', error);
+                return;
+            }
+
+            // Check response structure
+            if (!featureCollection || !featureCollection.features || featureCollection.features.length === 0) {
+                // No features found at click location
+                return;
+            }
+
+            // Get the first feature found
+            const feature = featureCollection.features[0];
+
+            // Check if feature has the expected properties
+            if (!feature.properties || !feature.properties.OBJECTID_1) {
+                console.warn('Feature missing expected properties:', feature);
+                return;
+            }
+
+            // Get objectId - ensure it's a number for consistent comparison
+            const objectId = Number(feature.properties.OBJECTID_1);
+            const parkName = feature.properties.NAME || 'Unknown Park';
+
+            console.log(`Clicked park: ${parkName}, OBJECTID_1: ${objectId} (type: ${typeof objectId})`);
+
+            // Find alerts for this reserve
+            // Note: reserve_object_id might be number or string, so compare both as numbers
+            const parkAlerts = allAlerts.filter(a => {
+                const reserveId = Number(a.reserve_object_id);
+                return reserveId === objectId;
+            });
+
+            console.log(`Found ${parkAlerts.length} alerts for park ${parkName} (ID: ${objectId})`);
+            if (parkAlerts.length > 0) {
+                console.log('Alert IDs:', parkAlerts.map(a => a.alert_id));
+            }
+
+            if (parkAlerts.length > 0) {
+                // Create and show popup using same function as markers
+                L.popup()
+                    .setLatLng(e.latlng)
+                    .setContent(createPopupContent(parkName, parkAlerts))
+                    .openOn(map);
+            }
+        });
+    });
+
+    console.log('Boundary click handler initialized');
+}
+
+/**
  * Create a marker for a park with alerts
  */
 function createMarker(lat, lon, parkName, alerts, reserveObjectId) {
@@ -561,6 +636,9 @@ async function init() {
             applyFilters();
         }
     });
+
+    // Setup boundary click handler for interactive park boundaries
+    setupBoundaryClickHandler();
 
     console.log('Initialization complete');
 }
