@@ -4,6 +4,8 @@ let markersLayer;
 let boundariesLayer;
 let allAlerts = [];
 let arcgisServiceUrl = '';
+let currentParkAlerts = []; // Current park's alerts for navigation
+let currentAlertIndex = 0; // Current alert being viewed
 let currentFilters = {
     category: '',
     time: 'current',
@@ -284,11 +286,8 @@ function createMarker(lat, lon, parkName, alerts, reserveObjectId) {
     const popupContent = createPopupContent(parkName, alerts);
     marker.bindPopup(popupContent);
 
-    // Add click handler to marker
-    marker.on('click', () => {
-        // Show details panel for first alert
-        showDetails(alerts[0]);
-    });
+    // Don't auto-open sidebar on marker click - let user choose from popup
+    // The popup items will call showParkAlerts() when clicked
 }
 
 /**
@@ -296,30 +295,81 @@ function createMarker(lat, lon, parkName, alerts, reserveObjectId) {
  */
 function createPopupContent(parkName, alerts) {
     const alertCount = alerts.length;
-    const categories = [...new Set(alerts.map(a => a.alert_category))].join(', ');
+
+    // Store alerts globally for access by click handlers
+    const parkId = alerts[0].park_id;
+    window[`alerts_${parkId}`] = alerts;
 
     return `
         <div class="popup-content">
             <div class="popup-title">${parkName}</div>
             <div class="popup-park">${alertCount} alert${alertCount > 1 ? 's' : ''}</div>
-            <div class="popup-category">${categories}</div>
-            ${alerts.slice(0, 2).map(alert => `
-                <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid #eee;">
-                    <strong>${alert.alert_title}</strong>
-                </div>
-            `).join('')}
-            ${alertCount > 2 ? `<div style="margin-top: 0.5rem; color: #7f8c8d; font-size: 0.85rem;">... and ${alertCount - 2} more</div>` : ''}
-            <button class="popup-btn" onclick="showDetails(${JSON.stringify(alerts[0]).replace(/"/g, '&quot;')})">
-                View Details
-            </button>
+            <div class="popup-alerts-list">
+                ${alerts.map((alert, index) => `
+                    <div class="popup-alert-item" onclick="showParkAlerts('${parkId}', ${index})">
+                        <div class="popup-alert-icon ${getAlertIconClass(alert)}">!</div>
+                        <div class="popup-alert-content">
+                            <div class="popup-alert-title">${alert.alert_title}</div>
+                            <div class="popup-alert-category">${alert.alert_category}</div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
         </div>
     `;
 }
 
 /**
- * Show details panel for an alert
+ * Get icon class based on alert severity
  */
-function showDetails(alert) {
+function getAlertIconClass(alert) {
+    if (alert.park_closed) return 'alert-icon-closed';
+    if (alert.park_part_closed) return 'alert-icon-warning';
+    return 'alert-icon-info';
+}
+
+/**
+ * Show park alerts with navigation
+ */
+function showParkAlerts(parkId, alertIndex = 0) {
+    // Get alerts from global storage
+    const alerts = window[`alerts_${parkId}`];
+    if (!alerts || alerts.length === 0) return;
+
+    // Store current state
+    currentParkAlerts = alerts;
+    currentAlertIndex = alertIndex;
+
+    // Show the selected alert
+    showAlertDetails(alertIndex);
+}
+
+/**
+ * Navigate to previous alert
+ */
+function previousAlert() {
+    if (currentAlertIndex > 0) {
+        currentAlertIndex--;
+        showAlertDetails(currentAlertIndex);
+    }
+}
+
+/**
+ * Navigate to next alert
+ */
+function nextAlert() {
+    if (currentAlertIndex < currentParkAlerts.length - 1) {
+        currentAlertIndex++;
+        showAlertDetails(currentAlertIndex);
+    }
+}
+
+/**
+ * Show details for specific alert index
+ */
+function showAlertDetails(index) {
+    const alert = currentParkAlerts[index];
+    if (!alert) return;
     const panel = document.getElementById('details-panel');
     const content = document.getElementById('details-content');
 
@@ -338,7 +388,38 @@ function showDetails(alert) {
         statusBadge = '<span class="status-badge status-open">Open</span>';
     }
 
+    // Build navigation
+    const hasMultipleAlerts = currentParkAlerts.length > 1;
+    const alertCounter = hasMultipleAlerts ? `
+        <div class="alert-navigation">
+            <button class="nav-btn" onclick="previousAlert()" ${index === 0 ? 'disabled' : ''}>
+                ‹
+            </button>
+            <span class="alert-counter">Alert ${index + 1} of ${currentParkAlerts.length}</span>
+            <button class="nav-btn" onclick="nextAlert()" ${index === currentParkAlerts.length - 1 ? 'disabled' : ''}>
+                ›
+            </button>
+        </div>
+    ` : '';
+
+    // Build alerts list for quick switching
+    const alertsList = hasMultipleAlerts ? `
+        <div class="detail-section">
+            <h3>All Alerts for ${alert.park_name}</h3>
+            <div class="sidebar-alerts-list">
+                ${currentParkAlerts.map((a, i) => `
+                    <div class="sidebar-alert-item ${i === index ? 'active' : ''}" onclick="showAlertDetails(${i})">
+                        <div class="sidebar-alert-icon ${getAlertIconClass(a)}">!</div>
+                        <div class="sidebar-alert-title">${a.alert_title}</div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    ` : '';
+
     content.innerHTML = `
+        ${alertCounter}
+
         <div class="detail-header">
             <h2 class="detail-title">${alert.alert_title}</h2>
             <p class="detail-park">${alert.park_name}</p>
@@ -386,6 +467,8 @@ function showDetails(alert) {
                 </div>
             </div>
         ` : ''}
+
+        ${alertsList}
     `;
 
     // Show panel
@@ -462,8 +545,11 @@ async function init() {
     console.log('Initialization complete');
 }
 
-// Make showDetails available globally for popup buttons
-window.showDetails = showDetails;
+// Make functions available globally for onclick handlers
+window.showParkAlerts = showParkAlerts;
+window.showAlertDetails = showAlertDetails;
+window.previousAlert = previousAlert;
+window.nextAlert = nextAlert;
 
 // Start the app when DOM is ready
 if (document.readyState === 'loading') {
