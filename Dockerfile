@@ -23,12 +23,8 @@ RUN npm run build
 # Stage 2: Production image
 FROM node:20-alpine
 
-# Install runtime dependencies for better-sqlite3
-RUN apk add --no-cache sqlite
-
-# Create app user for security
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
+# Install runtime dependencies: sqlite for better-sqlite3, curl for healthcheck
+RUN apk add --no-cache sqlite curl
 
 WORKDIR /app
 
@@ -49,12 +45,9 @@ COPY public ./public
 COPY start.sh ./
 RUN chmod +x start.sh
 
-# Create data directory for SQLite database
+# Create data directory for SQLite database with proper permissions
 RUN mkdir -p /app/data && \
-    chown -R nodejs:nodejs /app
-
-# Switch to non-root user
-USER nodejs
+    chmod 777 /app/data
 
 # Expose web server port
 EXPOSE 3000
@@ -64,9 +57,9 @@ ENV NODE_ENV=production \
     DATABASE_PATH=/app/data/npws-alerts.db \
     PORT=3000
 
-# Health check for web server
+# Health check for web server using curl
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:3000/api/stats', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+    CMD curl -f http://localhost:3000/api/stats || exit 1
 
 # Run startup script that launches both scheduler and web server
 CMD ["./start.sh"]

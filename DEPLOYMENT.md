@@ -179,6 +179,40 @@ To backup your SQLite database:
 
 ## Troubleshooting
 
+### Common Issues and Solutions
+
+#### "SqliteError: unable to open database file"
+
+**Symptom**: Container fails with `SQLITE_CANTOPEN` error
+
+**Causes**:
+- Persistent volume not properly mounted
+- Permission issues with the `/app/data` directory
+
+**Solutions**:
+1. Verify persistent volume is configured in Coolify:
+   - Go to Storages/Persistent Volumes
+   - Ensure volume is mounted at `/app/data`
+2. Check container logs to see the database path
+3. If issue persists, try removing and recreating the persistent volume
+
+#### "Healthcheck needs curl or wget"
+
+**Symptom**: Warning message about healthcheck in deployment logs
+
+**Solution**: This has been fixed in the Dockerfile by installing curl. If you still see this:
+- Rebuild the image (force rebuild in Coolify)
+- Or disable healthcheck in Coolify UI temporarily
+
+#### Build Warning: "NODE_ENV=production skips devDependencies"
+
+**Symptom**: Warning during build about NODE_ENV
+
+**Solution**: This is expected and safe to ignore. The Dockerfile uses multi-stage builds:
+- Build stage installs all dependencies (including dev)
+- Production stage only includes production dependencies
+- You can uncheck "Available at Buildtime" for NODE_ENV if you prefer
+
 ### Application Not Starting
 
 Check logs for:
@@ -276,8 +310,9 @@ CRON_SCHEDULE=*/15 * * * *  # More frequent updates for testing
 1. **Database Location**: Keep the database in the persistent volume, not in the container filesystem
 2. **Environment Variables**: Use Coolify's secret management for sensitive values
 3. **HTTPS**: Coolify typically provides automatic HTTPS via Let's Encrypt
-4. **Non-Root User**: The Dockerfile runs as non-root user `nodejs` for security
+4. **Container Isolation**: The application runs as root within the container, but the container itself provides process isolation from the host
 5. **Read-Only Access**: The application only reads from NPWS APIs, no write operations
+6. **File Permissions**: The `/app/data` directory has 777 permissions to ensure compatibility with various volume mount scenarios
 
 ## Performance Tuning
 
