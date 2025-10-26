@@ -213,30 +213,50 @@ function loadParkBoundaries(alerts) {
 
     console.log(`Loading boundaries for ${reserveObjectIds.length} reserves...`);
 
-    // Create a feature layer from the ArcGIS service
-    // Filter to only show parks with current alerts
+    // Extract base MapServer URL (remove /0 layer suffix)
+    // arcgisServiceUrl is like: .../MapServer/0
+    // We need: .../MapServer
+    const baseMapServerUrl = arcgisServiceUrl.replace(/\/\d+$/, '');
+
+    // Create definition expression to filter reserves
     const whereClause = `OBJECTID_1 IN (${reserveObjectIds.join(',')})`;
 
-    L.esri.featureLayer({
-        url: arcgisServiceUrl,
-        where: whereClause,
-        style: function() {
-            return {
-                color: '#3388ff',
-                weight: 2,
-                opacity: 0.6,
-                fillOpacity: 0.1
-            };
+    // Define custom blue styling for the layer with filter
+    const dynamicLayerDefinition = {
+        id: 0,
+        source: {
+            type: 'mapLayer',
+            mapLayerId: 0
         },
-        onEachFeature: function(feature, layer) {
-            // Add popup with park name
-            if (feature.properties.NAME) {
-                layer.bindPopup(`<strong>${feature.properties.NAME}</strong>`);
+        definitionExpression: whereClause,  // Filter must be inside dynamicLayers
+        drawingInfo: {
+            renderer: {
+                type: 'simple',
+                symbol: {
+                    type: 'esriSFS',  // Simple Fill Symbol
+                    style: 'esriSFSSolid',
+                    color: [51, 136, 255, 80],  // Blue RGBA (opacity ~30%)
+                    outline: {
+                        type: 'esriSLS',  // Simple Line Symbol
+                        style: 'esriSLSSolid',
+                        color: [51, 136, 255, 180],  // Blue outline (more opaque)
+                        width: 2
+                    }
+                }
             }
         }
+    };
+
+    // Use dynamic map layer (raster tiles) instead of feature layer (vector)
+    // This is much faster as the server pre-renders filtered features as tiles
+    L.esri.dynamicMapLayer({
+        url: baseMapServerUrl,
+        opacity: 1.0,  // Opacity controlled by RGBA values in symbol
+        layers: [0],   // Layer 0 is the reserves layer
+        dynamicLayers: JSON.stringify([dynamicLayerDefinition])
     }).addTo(boundariesLayer);
 
-    console.log('Park boundaries loaded');
+    console.log(`Park boundaries loaded as raster tiles (${reserveObjectIds.length} reserves filtered)`);
 }
 
 /**
