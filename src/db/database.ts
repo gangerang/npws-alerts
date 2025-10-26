@@ -35,7 +35,7 @@ export class NPWSDatabase {
   /**
    * Insert or update an alert
    */
-  public upsertAlert(alert: Omit<AlertRecord, 'id' | 'created_at' | 'updated_at'>): void {
+  public upsertAlert(alert: Omit<AlertRecord, 'id' | 'created_at' | 'updated_at'>): { wasInsert: boolean; changes: number } {
     const stmt = this.db.prepare(`
       INSERT INTO alerts (
         alert_id, park_name, park_id, alert_title, alert_description,
@@ -61,7 +61,12 @@ export class NPWSDatabase {
         updated_at = CURRENT_TIMESTAMP
     `);
 
-    stmt.run(alert);
+    const result = stmt.run(alert);
+
+    // Check if this was an insert (lastInsertRowid > 0) or update
+    const wasInsert = result.lastInsertRowid !== 0;
+
+    return { wasInsert, changes: result.changes };
   }
 
   /**
@@ -82,14 +87,43 @@ export class NPWSDatabase {
    * Insert multiple alerts in a transaction
    */
   public upsertAlerts(alerts: Omit<AlertRecord, 'id' | 'created_at' | 'updated_at'>[]): number {
+    console.log(`  Starting transaction to upsert ${alerts.length} alerts...`);
+
+    let insertCount = 0;
+    let updateCount = 0;
+    let errorCount = 0;
+    const failedAlerts: string[] = [];
+
     const insert = this.db.transaction((alerts: Omit<AlertRecord, 'id' | 'created_at' | 'updated_at'>[]) => {
       for (const alert of alerts) {
-        this.upsertAlert(alert);
+        try {
+          const result = this.upsertAlert(alert);
+          if (result.wasInsert) {
+            insertCount++;
+          } else {
+            updateCount++;
+          }
+        } catch (error) {
+          errorCount++;
+          failedAlerts.push(alert.alert_id);
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.error(`    ✗ Failed to upsert alert ${alert.alert_id}:`, errorMessage);
+        }
       }
-      return alerts.length;
+      return insertCount + updateCount;
     });
 
-    return insert(alerts);
+    const processed = insert(alerts);
+
+    console.log(`  Transaction complete:`);
+    console.log(`    - New inserts: ${insertCount}`);
+    console.log(`    - Updates: ${updateCount}`);
+    console.log(`    - Errors: ${errorCount}`);
+    if (errorCount > 0) {
+      console.error(`    - Failed alert IDs:`, failedAlerts);
+    }
+
+    return processed;
   }
 
   /**

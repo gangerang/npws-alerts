@@ -148,6 +148,10 @@ export class DataProcessor {
    * Sync alerts data from NPWS API
    */
   public async syncAlerts(): Promise<ProcessingStats> {
+    console.log('\n' + '='.repeat(80));
+    console.log('STARTING ALERTS SYNC');
+    console.log('='.repeat(80));
+
     const stats: ProcessingStats = {
       alertsFetched: 0,
       alertsProcessed: 0,
@@ -161,29 +165,50 @@ export class DataProcessor {
 
     // Mark all existing alerts as inactive before syncing
     // Alerts that are still active in the API will be re-activated during upsert
+    console.log('\nStep 1: Marking all existing alerts as inactive...');
     this.db.markAllAlertsInactive();
 
+    console.log('\nStep 2: Fetching alerts from NPWS API...');
     const { current, future } = await this.alertsFetcher.fetchAllAlerts();
 
     // Process current alerts
+    console.log('\nStep 3: Processing current alerts...');
     if (current.success && current.data) {
       stats.alertsFetched += current.data.length;
       const processed = await this.processAlerts(current.data, false);
       stats.alertsProcessed += processed;
+      console.log(`Current alerts summary: Fetched ${current.data.length}, Processed ${processed}`);
     } else {
-      console.error('Failed to fetch current alerts:', current.error);
+      console.error('✗ Failed to fetch current alerts:', current.error);
       stats.errors++;
     }
 
     // Process future alerts
+    console.log('\nStep 4: Processing future alerts...');
     if (future.success && future.data) {
       stats.alertsFetched += future.data.length;
       const processed = await this.processAlerts(future.data, true);
       stats.alertsProcessed += processed;
+      console.log(`Future alerts summary: Fetched ${future.data.length}, Processed ${processed}`);
     } else {
-      console.error('Failed to fetch future alerts:', future.error);
+      console.error('✗ Failed to fetch future alerts:', future.error);
       stats.errors++;
     }
+
+    console.log('\n' + '='.repeat(80));
+    console.log('ALERTS SYNC COMPLETE');
+    console.log('='.repeat(80));
+    console.log('Final Summary:');
+    console.log(`  Total alerts fetched from API: ${stats.alertsFetched}`);
+    console.log(`  Total alerts processed to database: ${stats.alertsProcessed}`);
+    console.log(`  Errors encountered: ${stats.errors}`);
+
+    if (stats.alertsFetched !== stats.alertsProcessed) {
+      console.warn(`  ⚠ ALERT: ${stats.alertsFetched - stats.alertsProcessed} alerts were fetched but not processed!`);
+    } else {
+      console.log(`  ✓ All fetched alerts were successfully processed`);
+    }
+    console.log('='.repeat(80) + '\n');
 
     return stats;
   }
@@ -192,12 +217,19 @@ export class DataProcessor {
    * Process and store alerts in database
    */
   private async processAlerts(alerts: any[], isFuture: boolean): Promise<number> {
+    console.log(`\nProcessing ${alerts.length} ${isFuture ? 'future' : 'current'} alerts...`);
+
     const alertRecords: Omit<AlertRecord, 'id' | 'created_at' | 'updated_at'>[] = [];
+    let processedCount = 0;
+    let failedCount = 0;
+    const failedAlerts: Array<{ id: string; park: string; error: string }> = [];
 
     for (const alert of alerts) {
       try {
         // The alert now includes Park information
         const park = alert.Park;
+
+        console.log(`  Processing alert ${alert.ID} - "${alert.Title}" (Park: ${park.Name})`);
 
         // Check if park mapping already exists
         let mapping = this.db.getParkMapping(park.Id);
@@ -214,10 +246,10 @@ export class DataProcessor {
               object_id: reserve.object_id,
               reserve_name: reserve.name,
             });
-            console.log(`Created mapping: "${park.Name}" -> "${reserve.name}" (ID: ${reserve.object_id})`);
+            console.log(`    Created mapping: "${park.Name}" -> "${reserve.name}" (ID: ${reserve.object_id})`);
           } else {
             // No matching reserve found - alert will be unmapped
-            console.log(`No reserve match found for park: "${park.Name}" (ID: ${park.Id})`);
+            console.log(`    No reserve match found for park: "${park.Name}" (ID: ${park.Id})`);
           }
         }
 
@@ -238,18 +270,50 @@ export class DataProcessor {
         };
 
         alertRecords.push(alertRecord);
+        processedCount++;
+        console.log(`    ✓ Alert record created successfully`);
       } catch (error) {
-        console.error('Error processing alert:', error);
+        failedCount++;
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`    ✗ Error processing alert ${alert.ID} (Park: ${alert.Park?.Name}):`, errorMessage);
+        failedAlerts.push({
+          id: alert.ID,
+          park: alert.Park?.Name || 'Unknown',
+          error: errorMessage,
+        });
       }
+    }
+
+    console.log(`\nProcessing summary:`);
+    console.log(`  - Total received: ${alerts.length}`);
+    console.log(`  - Successfully processed: ${processedCount}`);
+    console.log(`  - Failed to process: ${failedCount}`);
+    if (failedCount > 0) {
+      console.log(`  - Failed alerts:`, failedAlerts);
     }
 
     // Batch insert/update alerts
     try {
-      const processed = this.db.upsertAlerts(alertRecords);
-      console.log(`Processed ${processed} ${isFuture ? 'future' : 'current'} alerts`);
-      return processed;
+      console.log(`\nInserting ${alertRecords.length} alert records into database...`);
+      const inserted = this.db.upsertAlerts(alertRecords);
+
+      console.log(`Database insert summary:`);
+      console.log(`  - Expected to insert: ${alertRecords.length}`);
+      console.log(`  - Actually inserted/updated: ${inserted}`);
+
+      if (inserted !== alertRecords.length) {
+        console.warn(`  ⚠ Mismatch detected! Expected ${alertRecords.length} but inserted ${inserted}`);
+        console.warn(`  Alert IDs in batch:`, alertRecords.map(a => a.alert_id).slice(0, 10));
+      } else {
+        console.log(`  ✓ All alert records successfully inserted/updated`);
+      }
+
+      console.log(`Processed ${inserted} ${isFuture ? 'future' : 'current'} alerts`);
+      return inserted;
     } catch (error) {
-      console.error('Error inserting alerts:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`✗ Error inserting alerts:`, errorMessage);
+      console.error(`  Failed to insert ${alertRecords.length} alert records`);
       return 0;
     }
   }
