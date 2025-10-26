@@ -205,6 +205,25 @@ app.get('/api/unmapped-alerts', (req, res) => {
   }
 });
 
+// Get unmapped parks (unique parks without a park mapping, across all alerts)
+app.get('/api/unmapped-parks', (req, res) => {
+  try {
+    const unmappedParks = db.getUnmappedParks();
+
+    res.json({
+      success: true,
+      count: unmappedParks.length,
+      data: unmappedParks,
+    });
+  } catch (error) {
+    console.error('Error fetching unmapped parks:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch unmapped parks',
+    });
+  }
+});
+
 // Get configuration (for frontend to access ArcGIS URLs, etc.)
 app.get('/api/config', (req, res) => {
   try {
@@ -272,6 +291,7 @@ app.listen(PORT, () => {
   console.log('  GET  /api/alerts/with-reserves   - Get alerts with reserve data');
   console.log('  GET  /api/alerts/categories      - Get unique categories');
   console.log('  GET  /api/unmapped-alerts        - Get unmapped alerts');
+  console.log('  GET  /api/unmapped-parks         - Get unmapped parks');
   console.log('  GET  /api/reserves               - Get all reserves');
   console.log('  GET  /api/reserves/:name         - Get reserve by name');
   console.log('  GET  /api/config                 - Get configuration');

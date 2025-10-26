@@ -225,6 +225,25 @@ export class NPWSDatabase {
   }
 
   /**
+   * Get unique unmapped parks (parks with alerts but no mapping)
+   */
+  public getUnmappedParks(): Array<{ park_id: string; park_name: string; alert_count: number }> {
+    const stmt = this.db.prepare(`
+      SELECT
+        a.park_id,
+        a.park_name,
+        COUNT(*) as alert_count
+      FROM alerts a
+      LEFT JOIN park_mappings pm ON a.park_id = pm.park_id
+      WHERE pm.park_id IS NULL
+      GROUP BY a.park_id, a.park_name
+      ORDER BY a.park_name
+    `);
+
+    return stmt.all() as Array<{ park_id: string; park_name: string; alert_count: number }>;
+  }
+
+  /**
    * Get alerts with their associated reserve information
    */
   public getAlertsWithReserves(isFuture: boolean = false): any[] {
