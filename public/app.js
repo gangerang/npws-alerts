@@ -437,25 +437,13 @@ function createPopupContent(parkName, alerts) {
     const parkId = alerts[0].park_id;
     window[`alerts_${parkId}`] = alerts;
 
-    // For parks with many alerts, show compact view
-    const maxAlertsToShow = 5;
-    const showingAll = alertCount <= maxAlertsToShow;
-    const alertsToDisplay = showingAll ? alerts : alerts.slice(0, maxAlertsToShow);
-    const remainingCount = alertCount - maxAlertsToShow;
-
     return `
         <div class="popup-content">
             <div class="popup-title">${parkName}</div>
             <div class="popup-subtitle">${alertCount} alert${alertCount > 1 ? 's' : ''}</div>
 
-            ${!showingAll ? `
-                <button class="popup-view-all-btn" onclick="showParkAlerts('${parkId}', 0)">
-                    View All Alerts →
-                </button>
-            ` : ''}
-
             <div class="popup-alerts-list">
-                ${alertsToDisplay.map((alert, index) => `
+                ${alerts.map((alert, index) => `
                     <div class="popup-alert-item" onclick="showParkAlerts('${parkId}', ${index})">
                         <div class="popup-alert-icon ${getAlertIconClass(alert)}">!</div>
                         <div class="popup-alert-content">
@@ -464,12 +452,6 @@ function createPopupContent(parkName, alerts) {
                         </div>
                     </div>
                 `).join('')}
-
-                ${!showingAll ? `
-                    <div class="popup-more-alerts" onclick="showParkAlerts('${parkId}', 0)">
-                        ...and ${remainingCount} more
-                    </div>
-                ` : ''}
             </div>
         </div>
     `;
