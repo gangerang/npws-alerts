@@ -46,9 +46,8 @@ export class NPWSDatabase {
         @alert_category, @start_date, @end_date, @last_reviewed,
         @park_closed, @park_part_closed, @is_future, @is_active
       )
-      ON CONFLICT(alert_id, is_future) DO UPDATE SET
+      ON CONFLICT(alert_id, park_id, is_future) DO UPDATE SET
         park_name = @park_name,
-        park_id = @park_id,
         alert_title = @alert_title,
         alert_description = @alert_description,
         alert_category = @alert_category,

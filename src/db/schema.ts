@@ -72,7 +72,7 @@ export class DatabaseSchema {
         is_active INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(alert_id, is_future)
+        UNIQUE(alert_id, park_id, is_future)
       )
     `);
 
