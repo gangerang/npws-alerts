@@ -485,17 +485,16 @@ function setupBoundaryClickHandler() {
  * Create a marker for a park with alerts
  */
 function createMarker(lat, lon, parkName, alerts, reserveObjectId) {
-    // Determine marker color based on alert severity
+    // Determine marker color based on closure status
     const hasClosedPark = alerts.some(a => a.park_closed);
-    const hasFireBan = alerts.some(a => a.alert_category === 'Fire bans');
-    const category = alerts[0].alert_category;
+    const hasClosedAreas = alerts.some(a => a.park_part_closed);
 
-    let color = CATEGORY_COLORS[category] || CATEGORY_COLORS.default;
+    let color = '#3498db'; // Blue (default)
 
     if (hasClosedPark) {
         color = '#e74c3c'; // Red for closed parks
-    } else if (hasFireBan) {
-        color = '#f39c12'; // Orange for fire bans
+    } else if (hasClosedAreas) {
+        color = '#f39c12'; // Orange for closed areas
     }
 
     // Create custom icon
@@ -577,7 +576,7 @@ function createPopupContent(parkName, alerts) {
 
                     return `
                         <div class="popup-alert-item" onclick="showParkAlerts('${parkId}', ${index})">
-                            <div class="popup-alert-icon ${getAlertIconClass(alert)}">!</div>
+                            <div class="popup-alert-icon ${getAlertIconClass(alert)}">${getAlertIcon(alert)}</div>
                             <div class="popup-alert-content">
                                 <div class="popup-alert-title">${alert.alert_title}</div>
                                 <div class="popup-alert-category">${alert.alert_category} | ${dateRange}</div>
@@ -591,11 +590,27 @@ function createPopupContent(parkName, alerts) {
 }
 
 /**
- * Get icon class based on alert severity
+ * Get icon based on alert category
+ */
+function getAlertIcon(alert) {
+    const categoryIcons = {
+        'Closed parks': '⛔',
+        'Closed areas': '🚧',
+        'Fire bans': '🔥',
+        'Fires - Advice': '🔥',
+        'Safety alerts': '⚠️',
+        'Other incidents': '📢',
+        'Other planned events': '📅'
+    };
+    return categoryIcons[alert.alert_category] || '📍';
+}
+
+/**
+ * Get icon class based on alert category
  */
 function getAlertIconClass(alert) {
-    if (alert.park_closed) return 'alert-icon-closed';
-    if (alert.park_part_closed) return 'alert-icon-warning';
+    if (alert.alert_category === 'Closed parks') return 'alert-icon-closed';
+    if (alert.alert_category === 'Closed areas') return 'alert-icon-warning';
     return 'alert-icon-info';
 }
 
@@ -649,16 +664,6 @@ function showAlertDetails(index) {
     const endDate = alert.end_date ? new Date(alert.end_date).toLocaleDateString() : 'Ongoing';
     const lastReviewed = new Date(alert.last_reviewed).toLocaleDateString();
 
-    // Determine status
-    let statusBadge = '';
-    if (alert.park_closed) {
-        statusBadge = '<span class="status-badge status-closed">Park Closed</span>';
-    } else if (alert.park_part_closed) {
-        statusBadge = '<span class="status-badge status-part-closed">Partially Closed</span>';
-    } else {
-        statusBadge = '<span class="status-badge status-open">Open</span>';
-    }
-
     // Build navigation
     const hasMultipleAlerts = currentParkAlerts.length > 1;
     const alertCounter = hasMultipleAlerts ? `
@@ -680,7 +685,7 @@ function showAlertDetails(index) {
             <div class="sidebar-alerts-list">
                 ${currentParkAlerts.map((a, i) => `
                     <div class="sidebar-alert-item ${i === index ? 'active' : ''}" onclick="showAlertDetails(${i})">
-                        <div class="sidebar-alert-icon ${getAlertIconClass(a)}">!</div>
+                        <div class="sidebar-alert-icon ${getAlertIconClass(a)}">${getAlertIcon(a)}</div>
                         <div class="sidebar-alert-title">${a.alert_title}</div>
                     </div>
                 `).join('')}
@@ -713,7 +718,6 @@ function showAlertDetails(index) {
             <p class="detail-park">${alert.park_name}</p>
             <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-top: 0.5rem;">
                 <span class="detail-category">${alert.alert_category}</span>
-                ${statusBadge}
                 <button class="btn-secondary" onclick="copyShareLink('${shareableURL.replace(/'/g, "\\'")}');" style="margin-left: auto; padding: 0.4rem 0.8rem; font-size: 0.85rem;">
                     📋 Copy Link
                 </button>
