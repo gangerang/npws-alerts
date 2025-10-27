@@ -236,7 +236,15 @@ export class DataProcessor {
 
         if (!mapping) {
           // Try to find matching reserve by name (case-insensitive)
-          const reserve = this.db.getReserveByName(park.Name);
+          let reserve = this.db.getReserveByName(park.Name);
+
+          // If no exact match, try ignoring CCA Zone pattern
+          if (!reserve) {
+            reserve = this.db.getReserveByNameIgnoringCCAZone(park.Name);
+            if (reserve) {
+              console.log(`    Found CCA Zone match: "${park.Name}" -> "${reserve.name}"`);
+            }
+          }
 
           if (reserve) {
             // Create new park mapping

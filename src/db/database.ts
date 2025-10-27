@@ -222,6 +222,35 @@ export class NPWSDatabase {
   }
 
   /**
+   * Get reserve by name, ignoring CCA Zone pattern
+   * This matches reserves where the name would be identical if "CCA Zone X" was removed
+   * Prioritizes Zone 1 if multiple zones match
+   */
+  public getReserveByNameIgnoringCCAZone(parkName: string): ReserveRecord | undefined {
+    const stmt = this.db.prepare(`
+      SELECT * FROM reserves
+      WHERE REPLACE(REPLACE(REPLACE(REPLACE(
+        name,
+        ' CCA Zone 1 ', ' '),
+        ' CCA Zone 2 ', ' '),
+        ' CCA Zone 3 ', ' '),
+        ' CCA Zone 4 ', ' '
+      ) = ?
+      ORDER BY
+        CASE
+          WHEN name LIKE '% CCA Zone 1 %' THEN 1
+          WHEN name LIKE '% CCA Zone 2 %' THEN 2
+          WHEN name LIKE '% CCA Zone 3 %' THEN 3
+          WHEN name LIKE '% CCA Zone 4 %' THEN 4
+          ELSE 0
+        END
+      LIMIT 1
+    `);
+
+    return stmt.get(parkName) as ReserveRecord | undefined;
+  }
+
+  /**
    * Get all reserves
    */
   public getAllReserves(): ReserveRecord[] {
