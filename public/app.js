@@ -316,10 +316,13 @@ function displayAlerts(alerts) {
 /**
  * Load park boundaries from ArcGIS service
  */
-function loadParkBoundaries(alerts) {
-    // Remove existing boundaries layer if it exists
-    if (map.getLayer('park-boundaries')) {
-        map.removeLayer('park-boundaries');
+async function loadParkBoundaries(alerts) {
+    // Remove existing boundaries layers if they exist
+    if (map.getLayer('park-boundaries-fill')) {
+        map.removeLayer('park-boundaries-fill');
+    }
+    if (map.getLayer('park-boundaries-outline')) {
+        map.removeLayer('park-boundaries-outline');
     }
     if (map.getSource('park-boundaries')) {
         map.removeSource('park-boundaries');
@@ -344,36 +347,61 @@ function loadParkBoundaries(alerts) {
 
     console.log(`Loading boundaries for ${reserveObjectIds.length} reserves...`);
 
-    // Extract base MapServer URL (remove /0 layer suffix)
-    const baseMapServerUrl = arcgisServiceUrl.replace(/\/\d+$/, '');
-
     // Create definition expression to filter reserves
     const whereClause = `OBJECTID_1 IN (${reserveObjectIds.join(',')})`;
 
-    // Build export URL for ArcGIS Map Service
-    // This exports the filtered features as image tiles
-    const exportUrl = `${baseMapServerUrl}/export`;
-
-    // Add as raster tile source
-    map.addSource('park-boundaries', {
-        type: 'raster',
-        tiles: [
-            `${exportUrl}?bbox={bbox-epsg-3857}&format=png&transparent=true&layers=show:0&layerDefs={"0":"${encodeURIComponent(whereClause)}"}&size=256,256&f=image`
-        ],
-        tileSize: 256,
-        scheme: 'xyz'
+    // Query features from ArcGIS service
+    const queryUrl = `${arcgisServiceUrl}/query`;
+    const params = new URLSearchParams({
+        where: whereClause,
+        outFields: 'OBJECTID_1,NAME',
+        returnGeometry: true,
+        f: 'geojson',
+        outSR: '4326'
     });
 
-    map.addLayer({
-        id: 'park-boundaries',
-        type: 'raster',
-        source: 'park-boundaries',
-        paint: {
-            'raster-opacity': 0.6
+    try {
+        const response = await fetch(`${queryUrl}?${params.toString()}`);
+        const geojson = await response.json();
+
+        if (!geojson.features || geojson.features.length === 0) {
+            console.warn('No features returned from ArcGIS service');
+            return;
         }
-    });
 
-    console.log(`Park boundaries loaded as raster tiles (${reserveObjectIds.length} reserves filtered)`);
+        // Add GeoJSON source
+        map.addSource('park-boundaries', {
+            type: 'geojson',
+            data: geojson
+        });
+
+        // Add fill layer
+        map.addLayer({
+            id: 'park-boundaries-fill',
+            type: 'fill',
+            source: 'park-boundaries',
+            paint: {
+                'fill-color': '#3388ff',
+                'fill-opacity': 0.3
+            }
+        });
+
+        // Add outline layer
+        map.addLayer({
+            id: 'park-boundaries-outline',
+            type: 'line',
+            source: 'park-boundaries',
+            paint: {
+                'line-color': '#3388ff',
+                'line-width': 2,
+                'line-opacity': 0.7
+            }
+        });
+
+        console.log(`Park boundaries loaded (${geojson.features.length} features)`);
+    } catch (error) {
+        console.error('Error loading park boundaries:', error);
+    }
 }
 
 /**
@@ -416,75 +444,62 @@ function setupFilterToggle() {
 
 /**
  * Setup click handler for park boundaries
- * Uses ArcGIS Identify service to make raster boundaries interactive
+ * Uses MapLibre's queryRenderedFeatures for GeoJSON boundaries
  */
 function setupBoundaryClickHandler() {
-    map.on('click', async function(e) {
-        // Only identify if we have boundaries loaded and ArcGIS service configured
-        if (!arcgisServiceUrl || !map.getLayer('park-boundaries')) {
+    // Add cursor pointer on hover over boundaries
+    map.on('mouseenter', 'park-boundaries-fill', () => {
+        map.getCanvas().style.cursor = 'pointer';
+    });
+
+    map.on('mouseleave', 'park-boundaries-fill', () => {
+        map.getCanvas().style.cursor = '';
+    });
+
+    // Click handler for boundaries
+    map.on('click', 'park-boundaries-fill', function(e) {
+        // Prevent event from bubbling to markers
+        if (e.originalEvent) {
+            e.originalEvent.stopPropagation();
+        }
+
+        const features = map.queryRenderedFeatures(e.point, {
+            layers: ['park-boundaries-fill']
+        });
+
+        if (!features || features.length === 0) {
             return;
         }
 
-        // Extract base MapServer URL
-        const baseMapServerUrl = arcgisServiceUrl.replace(/\/\d+$/, '');
+        // Get the first feature
+        const feature = features[0];
 
-        // Build identify request
-        const identifyUrl = `${baseMapServerUrl}/identify`;
-        const params = new URLSearchParams({
-            f: 'json',
-            geometry: JSON.stringify({ x: e.lngLat.lng, y: e.lngLat.lat }),
-            geometryType: 'esriGeometryPoint',
-            layers: 'all:0',
-            mapExtent: map.getBounds().toArray().flat().join(','),
-            imageDisplay: `${map.getCanvas().width},${map.getCanvas().height},96`,
-            sr: '4326',
-            tolerance: 5,
-            returnGeometry: false
+        if (!feature.properties || !feature.properties.OBJECTID_1) {
+            console.warn('Feature missing expected properties:', feature);
+            return;
+        }
+
+        // Get objectId - ensure it's a number for consistent comparison
+        const objectId = Number(feature.properties.OBJECTID_1);
+        const parkName = feature.properties.NAME || 'Unknown Park';
+
+        console.log(`Clicked park: ${parkName}, OBJECTID_1: ${objectId}`);
+
+        // Find alerts for this reserve
+        const parkAlerts = allAlerts.filter(a => {
+            const reserveId = Number(a.reserve_object_id);
+            return reserveId === objectId;
         });
 
-        try {
-            const response = await fetch(`${identifyUrl}?${params.toString()}`);
-            const data = await response.json();
+        console.log(`Found ${parkAlerts.length} alerts for park ${parkName} (ID: ${objectId})`);
 
-            if (!data.results || data.results.length === 0) {
-                return; // No features found
-            }
-
-            // Get the first feature found
-            const feature = data.results[0];
-
-            if (!feature.attributes || !feature.attributes.OBJECTID_1) {
-                console.warn('Feature missing expected properties:', feature);
-                return;
-            }
-
-            // Get objectId - ensure it's a number for consistent comparison
-            const objectId = Number(feature.attributes.OBJECTID_1);
-            const parkName = feature.attributes.NAME || 'Unknown Park';
-
-            console.log(`Clicked park: ${parkName}, OBJECTID_1: ${objectId} (type: ${typeof objectId})`);
-
-            // Find alerts for this reserve
-            const parkAlerts = allAlerts.filter(a => {
-                const reserveId = Number(a.reserve_object_id);
-                return reserveId === objectId;
-            });
-
-            console.log(`Found ${parkAlerts.length} alerts for park ${parkName} (ID: ${objectId})`);
-            if (parkAlerts.length > 0) {
-                console.log('Alert IDs:', parkAlerts.map(a => a.alert_id));
-            }
-
-            if (parkAlerts.length > 0) {
-                // Create and show popup
-                const popupContent = createPopupContent(parkName, parkAlerts);
-                new maplibregl.Popup()
-                    .setLngLat([e.lngLat.lng, e.lngLat.lat])
-                    .setHTML(popupContent)
-                    .addTo(map);
-            }
-        } catch (error) {
-            console.error('Error identifying features:', error);
+        if (parkAlerts.length > 0) {
+            // Create and show popup
+            const popupContent = createPopupContent(parkName, parkAlerts);
+            new maplibregl.Popup()
+                .setLngLat(e.lngLat)
+                .setHTML(popupContent)
+                .addTo(map);
         }
     });
 
@@ -527,6 +542,11 @@ function createMarker(lat, lon, parkName, alerts, reserveObjectId) {
             cursor: pointer;
         ">${alerts.length}</div>
     `;
+
+    // Prevent marker clicks from propagating to map (prevent double popups)
+    el.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
 
     // Create marker
     const marker = new maplibregl.Marker({ element: el })
