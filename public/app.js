@@ -549,10 +549,6 @@ function formatAlertDate(dateString) {
 function createPopupContent(parkName, alerts) {
     const alertCount = alerts.length;
 
-    // Store alerts globally for access by click handlers
-    const parkId = alerts[0].park_id;
-    window[`alerts_${parkId}`] = alerts;
-
     // Sort alerts: first by category (alphabetically), then by start date
     const sortedAlerts = [...alerts].sort((a, b) => {
         // Primary sort: category
@@ -562,6 +558,11 @@ function createPopupContent(parkName, alerts) {
         // Secondary sort: start date (earliest first)
         return new Date(a.start_date) - new Date(b.start_date);
     });
+
+    // Store SORTED alerts globally for access by click handlers
+    // This ensures indices in popup match indices when clicking
+    const parkId = alerts[0].park_id;
+    window[`alerts_${parkId}`] = sortedAlerts;
 
     return `
         <div class="popup-content">
