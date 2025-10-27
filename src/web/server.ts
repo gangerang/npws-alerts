@@ -392,6 +392,197 @@ app.get('/api/stats', (req, res) => {
   }
 });
 
+// API documentation landing page
+app.get('/api', (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>NPWS Alerts API Documentation</title>
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+          max-width: 1000px;
+          margin: 0 auto;
+          padding: 2rem;
+          line-height: 1.6;
+          color: #333;
+        }
+        h1 {
+          color: #2c3e50;
+          border-bottom: 3px solid #3498db;
+          padding-bottom: 0.5rem;
+        }
+        h2 {
+          color: #34495e;
+          margin-top: 2rem;
+        }
+        .endpoint {
+          background: #f8f9fa;
+          border-left: 4px solid #3498db;
+          padding: 1rem;
+          margin: 1rem 0;
+          border-radius: 4px;
+        }
+        .method {
+          display: inline-block;
+          background: #3498db;
+          color: white;
+          padding: 0.2rem 0.5rem;
+          border-radius: 3px;
+          font-weight: bold;
+          font-size: 0.9rem;
+          margin-right: 0.5rem;
+        }
+        .path {
+          font-family: 'Courier New', monospace;
+          font-weight: bold;
+          color: #2c3e50;
+        }
+        .description {
+          margin-top: 0.5rem;
+          color: #555;
+        }
+        .params {
+          margin-top: 0.5rem;
+          font-size: 0.9rem;
+        }
+        .param-name {
+          font-family: 'Courier New', monospace;
+          background: #e9ecef;
+          padding: 0.1rem 0.3rem;
+          border-radius: 2px;
+        }
+        code {
+          background: #e9ecef;
+          padding: 0.1rem 0.4rem;
+          border-radius: 3px;
+          font-family: 'Courier New', monospace;
+        }
+        .footer {
+          margin-top: 3rem;
+          padding-top: 1rem;
+          border-top: 1px solid #dee2e6;
+          text-align: center;
+          color: #6c757d;
+          font-size: 0.9rem;
+        }
+      </style>
+    </head>
+    <body>
+      <h1>NPWS Alerts API Documentation</h1>
+      <p>RESTful API for accessing NSW National Parks and Wildlife Service alerts and reserve information.</p>
+
+      <h2>Alerts Endpoints</h2>
+
+      <div class="endpoint">
+        <div><span class="method">GET</span><span class="path">/api/alerts</span></div>
+        <div class="description">Get all active alerts with optional filtering</div>
+        <div class="params">
+          <strong>Query Parameters:</strong><br>
+          <span class="param-name">category</span> - Filter by alert category<br>
+          <span class="param-name">is_future</span> - Filter by future alerts (true/false)<br>
+          <span class="param-name">park_name</span> - Filter by park name (partial match)<br>
+          <span class="param-name">include_inactive</span> - Include inactive alerts (true/false)
+        </div>
+      </div>
+
+      <div class="endpoint">
+        <div><span class="method">GET</span><span class="path">/api/alerts/with-reserves</span></div>
+        <div class="description">Get all active alerts with associated reserve information (for mapping)</div>
+        <div class="params">
+          <strong>Query Parameters:</strong><br>
+          <span class="param-name">category</span> - Filter by alert category<br>
+          <span class="param-name">is_future</span> - Filter by future alerts (true/false)<br>
+          <span class="param-name">include_inactive</span> - Include inactive alerts (true/false)
+        </div>
+      </div>
+
+      <div class="endpoint">
+        <div><span class="method">GET</span><span class="path">/api/alerts/categories</span></div>
+        <div class="description">Get unique alert categories for filtering</div>
+      </div>
+
+      <div class="endpoint">
+        <div><span class="method">GET</span><span class="path">/api/alert/:parkSlug</span></div>
+        <div class="description">Get all alerts for a specific park by slug (e.g., "wollemi-np")</div>
+        <div class="params">
+          <strong>Path Parameters:</strong><br>
+          <span class="param-name">parkSlug</span> - URL-friendly park name slug
+        </div>
+      </div>
+
+      <div class="endpoint">
+        <div><span class="method">GET</span><span class="path">/api/alert/:parkSlug/:alertSlug/:npwsId</span></div>
+        <div class="description">Get a specific alert by park slug, alert slug, and NPWS ID</div>
+        <div class="params">
+          <strong>Path Parameters:</strong><br>
+          <span class="param-name">parkSlug</span> - URL-friendly park name slug<br>
+          <span class="param-name">alertSlug</span> - URL-friendly alert title slug<br>
+          <span class="param-name">npwsId</span> - NPWS alert ID number
+        </div>
+      </div>
+
+      <h2>Reserves Endpoints</h2>
+
+      <div class="endpoint">
+        <div><span class="method">GET</span><span class="path">/api/reserves</span></div>
+        <div class="description">Get all reserves</div>
+      </div>
+
+      <div class="endpoint">
+        <div><span class="method">GET</span><span class="path">/api/reserves/:name</span></div>
+        <div class="description">Get reserve by name (case-insensitive)</div>
+        <div class="params">
+          <strong>Path Parameters:</strong><br>
+          <span class="param-name">name</span> - Reserve name
+        </div>
+      </div>
+
+      <h2>Utility Endpoints</h2>
+
+      <div class="endpoint">
+        <div><span class="method">GET</span><span class="path">/api/unmapped-alerts</span></div>
+        <div class="description">Get alerts without a park mapping</div>
+        <div class="params">
+          <strong>Query Parameters:</strong><br>
+          <span class="param-name">is_future</span> - Filter by future alerts (true/false)
+        </div>
+      </div>
+
+      <div class="endpoint">
+        <div><span class="method">GET</span><span class="path">/api/unmapped-parks</span></div>
+        <div class="description">Get unique parks without a mapping (across all alerts)</div>
+      </div>
+
+      <div class="endpoint">
+        <div><span class="method">GET</span><span class="path">/api/config</span></div>
+        <div class="description">Get configuration (ArcGIS service URLs, etc.)</div>
+      </div>
+
+      <div class="endpoint">
+        <div><span class="method">GET</span><span class="path">/api/stats</span></div>
+        <div class="description">Get database statistics (alert count, reserve count, last sync time, category breakdown)</div>
+      </div>
+
+      <h2>Response Format</h2>
+      <p>All endpoints return JSON with the following structure:</p>
+      <pre><code>{
+  "success": true,
+  "count": 123,        // Optional: number of results
+  "data": { ... }      // Response data
+}</code></pre>
+
+      <div class="footer">
+        <p>NPWS Alerts API | <a href="/">View Map Interface</a></p>
+      </div>
+    </body>
+    </html>
+  `);
+});
+
 // Serve index.html for root route
 // Page routes - serve HTML (must come after API routes)
 app.get('/alert/:parkSlug/:alertSlug/:npwsId', (req, res) => {
