@@ -174,15 +174,22 @@ app.get('/api/alert/:parkSlug', (req, res) => {
   try {
     const { parkSlug } = req.params;
 
-    // Find reserve by matching slug against name_short
+    // Find reserve by matching slug against name_short or location
     const reserveStmt = db['db'].prepare(`
-      SELECT object_id, name, name_short, centroid_lat, centroid_lon
+      SELECT object_id, name, name_short, location, centroid_lat, centroid_lon
       FROM reserves
     `);
     const reserves = reserveStmt.all() as any[];
 
-    // Find matching reserve by slug
-    const matchingReserve = reserves.find((r: any) => createSlug(r.name_short) === parkSlug);
+    // Find matching reserve by slug (check both name_short and location for Flora Reserves)
+    const matchingReserve = reserves.find((r: any) => {
+      // For Flora Reserves (NPWS Managed Other), match against location field
+      if (r.name_short === 'NPWS Managed Other' && r.location) {
+        return createSlug(r.location) === parkSlug;
+      }
+      // For regular reserves, match against name_short
+      return createSlug(r.name_short) === parkSlug;
+    });
 
     if (!matchingReserve) {
       return res.status(404).json({
@@ -194,6 +201,7 @@ app.get('/api/alert/:parkSlug', (req, res) => {
     // Get all active alerts for this reserve
     const alertsStmt = db['db'].prepare(`
       SELECT a.*, r.name as reserve_name, r.name_short as reserve_name_short,
+             r.location as reserve_location,
              r.centroid_lat, r.centroid_lon, r.object_id as reserve_object_id
       FROM alerts a
       INNER JOIN park_mappings pm ON a.park_id = pm.park_id
@@ -228,6 +236,7 @@ app.get('/api/alert/:parkSlug/:alertSlug/:npwsId', (req, res) => {
     // Use indexed npws_id column for fast lookup
     const stmt = db['db'].prepare(`
       SELECT a.*, r.name as reserve_name, r.name_short as reserve_name_short,
+             r.location as reserve_location,
              r.centroid_lat, r.centroid_lon, r.object_id as reserve_object_id
       FROM alerts a
       LEFT JOIN park_mappings pm ON a.park_id = pm.park_id

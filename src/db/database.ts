@@ -251,6 +251,27 @@ export class NPWSDatabase {
   }
 
   /**
+   * Get reserve by matching location field for Flora Reserves
+   * Flora Reserves have "NPWS Managed Other" as name, but actual name in location field
+   * Matches "Jellore Flora Reserve" against location "Jellore FR"
+   */
+  public getReserveByLocationPattern(parkName: string): ReserveRecord | undefined {
+    // Remove "Flora Reserve" or "Flora Reserves" suffix and trim
+    const baseName = parkName.replace(/\s+Flora\s+Reserves?$/i, '').trim();
+
+    // Try matching with "FR" abbreviation in location field
+    // Returns first match (lowest object_id) if multiple polygons exist
+    const stmt = this.db.prepare(`
+      SELECT * FROM reserves
+      WHERE location = ? OR location LIKE ?
+      ORDER BY object_id
+      LIMIT 1
+    `);
+
+    return stmt.get(`${baseName} FR`, `${baseName} FR%`) as ReserveRecord | undefined;
+  }
+
+  /**
    * Get all reserves
    */
   public getAllReserves(): ReserveRecord[] {

@@ -246,15 +246,26 @@ export class DataProcessor {
             }
           }
 
+          // If still no match and park name ends with "Flora Reserve(s)", try location-based matching
+          if (!reserve && park.Name.match(/Flora\s+Reserves?$/i)) {
+            reserve = this.db.getReserveByLocationPattern(park.Name);
+            if (reserve) {
+              console.log(`    Found Flora Reserve match: "${park.Name}" -> location: "${reserve.location}" (object_id: ${reserve.object_id})`);
+            }
+          }
+
           if (reserve) {
+            // For Flora Reserves, use location instead of name (name is generic "NPWS Managed Other")
+            const reserveDisplayName = reserve.location || reserve.name;
+
             // Create new park mapping
             this.db.upsertParkMapping({
               park_id: park.Id,
               park_name: park.Name,
               object_id: reserve.object_id,
-              reserve_name: reserve.name,
+              reserve_name: reserveDisplayName,
             });
-            console.log(`    Created mapping: "${park.Name}" -> "${reserve.name}" (ID: ${reserve.object_id})`);
+            console.log(`    Created mapping: "${park.Name}" -> "${reserveDisplayName}" (ID: ${reserve.object_id})`);
           } else {
             // No matching reserve found - alert will be unmapped
             console.log(`    No reserve match found for park: "${park.Name}" (ID: ${park.Id})`);

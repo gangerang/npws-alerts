@@ -715,7 +715,16 @@ function showAlertDetails(index) {
     ` : '';
 
     // Generate shareable URL using NPWS ID number
-    const parkSlug = alert.reserve_name_short ? createSlug(alert.reserve_name_short) : createSlug(alert.park_name);
+    // For Flora Reserves, use location instead of generic "NPWS Managed Other" name_short
+    let parkSlugSource;
+    if (alert.reserve_name_short && alert.reserve_name_short !== 'NPWS Managed Other') {
+        parkSlugSource = alert.reserve_name_short;
+    } else if (alert.reserve_location) {
+        parkSlugSource = alert.reserve_location;
+    } else {
+        parkSlugSource = alert.park_name;
+    }
+    const parkSlug = createSlug(parkSlugSource);
     const alertSlug = createSlug(alert.alert_title);
     const npwsId = extractNPWSId(alert.alert_id);
     const mapCenter = map.getCenter();
