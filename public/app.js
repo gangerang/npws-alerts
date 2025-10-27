@@ -1,7 +1,6 @@
 // Global variables
 let map;
-let markersLayer;
-let boundariesLayer;
+let markers = []; // Store marker instances
 let allAlerts = [];
 let arcgisServiceUrl = '';
 let currentParkAlerts = []; // Current park's alerts for navigation
@@ -81,10 +80,10 @@ async function handleURLRouting() {
                     const lat = parseFloat(urlParams.get('lat'));
                     const lon = parseFloat(urlParams.get('lon'));
                     const zoom = parseInt(urlParams.get('z'));
-                    map.setView([lat, lon], zoom);
+                    map.flyTo({ center: [lon, lat], zoom: zoom });
                 } else if (alert.centroid_lat && alert.centroid_lon) {
                     // Center on park location
-                    map.setView([alert.centroid_lat, alert.centroid_lon], 12);
+                    map.flyTo({ center: [alert.centroid_lon, alert.centroid_lat], zoom: 12 });
                 }
 
                 // Show alert details
@@ -109,10 +108,10 @@ async function handleURLRouting() {
                         const lat = parseFloat(urlParams.get('lat'));
                         const lon = parseFloat(urlParams.get('lon'));
                         const zoom = parseInt(urlParams.get('z'));
-                        map.setView([lat, lon], zoom);
+                        map.flyTo({ center: [lon, lat], zoom: zoom });
                     } else if (reserve.centroid_lat && reserve.centroid_lon) {
                         // Center on park location
-                        map.setView([reserve.centroid_lat, reserve.centroid_lon], 12);
+                        map.flyTo({ center: [reserve.centroid_lon, reserve.centroid_lat], zoom: 12 });
                     }
 
                     // Show first alert (or open popup with all alerts)
@@ -132,19 +131,38 @@ async function handleURLRouting() {
  */
 function initMap() {
     // Create map centered on NSW
-    map = L.map('map').setView([-32.5, 147.0], 7);
+    map = new maplibregl.Map({
+        container: 'map',
+        style: {
+            version: 8,
+            sources: {
+                'osm': {
+                    type: 'raster',
+                    tiles: [
+                        'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'
+                    ],
+                    tileSize: 256,
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                }
+            },
+            layers: [
+                {
+                    id: 'osm',
+                    type: 'raster',
+                    source: 'osm',
+                    minzoom: 0,
+                    maxzoom: 18
+                }
+            ]
+        },
+        center: [147.0, -32.5], // Note: [lon, lat] for MapLibre
+        zoom: 7
+    });
 
-    // Add OpenStreetMap tile layer
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom: 18,
-    }).addTo(map);
-
-    // Create layer for markers
-    markersLayer = L.layerGroup().addTo(map);
-
-    // Create layer for boundaries
-    boundariesLayer = L.layerGroup().addTo(map);
+    // Add navigation controls
+    map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
     console.log('Map initialized');
 }
@@ -261,7 +279,8 @@ async function loadAlerts() {
  */
 function displayAlerts(alerts) {
     // Clear existing markers
-    markersLayer.clearLayers();
+    markers.forEach(marker => marker.remove());
+    markers = [];
 
     // Group alerts by park to avoid duplicate markers
     const alertsByPark = {};
@@ -298,11 +317,16 @@ function displayAlerts(alerts) {
  * Load park boundaries from ArcGIS service
  */
 function loadParkBoundaries(alerts) {
-    // Clear existing boundaries
-    boundariesLayer.clearLayers();
+    // Remove existing boundaries layer if it exists
+    if (map.getLayer('park-boundaries')) {
+        map.removeLayer('park-boundaries');
+    }
+    if (map.getSource('park-boundaries')) {
+        map.removeSource('park-boundaries');
+    }
 
-    if (!arcgisServiceUrl || !window.L.esri) {
-        console.warn('ArcGIS service not configured or esri-leaflet not loaded');
+    if (!arcgisServiceUrl) {
+        console.warn('ArcGIS service not configured');
         return;
     }
 
@@ -321,47 +345,33 @@ function loadParkBoundaries(alerts) {
     console.log(`Loading boundaries for ${reserveObjectIds.length} reserves...`);
 
     // Extract base MapServer URL (remove /0 layer suffix)
-    // arcgisServiceUrl is like: .../MapServer/0
-    // We need: .../MapServer
     const baseMapServerUrl = arcgisServiceUrl.replace(/\/\d+$/, '');
 
     // Create definition expression to filter reserves
     const whereClause = `OBJECTID_1 IN (${reserveObjectIds.join(',')})`;
 
-    // Define custom blue styling for the layer with filter
-    const dynamicLayerDefinition = {
-        id: 0,
-        source: {
-            type: 'mapLayer',
-            mapLayerId: 0
-        },
-        definitionExpression: whereClause,  // Filter must be inside dynamicLayers
-        drawingInfo: {
-            renderer: {
-                type: 'simple',
-                symbol: {
-                    type: 'esriSFS',  // Simple Fill Symbol
-                    style: 'esriSFSSolid',
-                    color: [51, 136, 255, 80],  // Blue RGBA (opacity ~30%)
-                    outline: {
-                        type: 'esriSLS',  // Simple Line Symbol
-                        style: 'esriSLSSolid',
-                        color: [51, 136, 255, 180],  // Blue outline (more opaque)
-                        width: 2
-                    }
-                }
-            }
-        }
-    };
+    // Build export URL for ArcGIS Map Service
+    // This exports the filtered features as image tiles
+    const exportUrl = `${baseMapServerUrl}/export`;
 
-    // Use dynamic map layer (raster tiles) instead of feature layer (vector)
-    // This is much faster as the server pre-renders filtered features as tiles
-    L.esri.dynamicMapLayer({
-        url: baseMapServerUrl,
-        opacity: 1.0,  // Opacity controlled by RGBA values in symbol
-        layers: [0],   // Layer 0 is the reserves layer
-        dynamicLayers: JSON.stringify([dynamicLayerDefinition])
-    }).addTo(boundariesLayer);
+    // Add as raster tile source
+    map.addSource('park-boundaries', {
+        type: 'raster',
+        tiles: [
+            `${exportUrl}?bbox={bbox-epsg-3857}&format=png&transparent=true&layers=show:0&layerDefs={"0":"${encodeURIComponent(whereClause)}"}&size=256,256&f=image`
+        ],
+        tileSize: 256,
+        scheme: 'xyz'
+    });
+
+    map.addLayer({
+        id: 'park-boundaries',
+        type: 'raster',
+        source: 'park-boundaries',
+        paint: {
+            'raster-opacity': 0.6
+        }
+    });
 
     console.log(`Park boundaries loaded as raster tiles (${reserveObjectIds.length} reserves filtered)`);
 }
@@ -409,53 +419,52 @@ function setupFilterToggle() {
  * Uses ArcGIS Identify service to make raster boundaries interactive
  */
 function setupBoundaryClickHandler() {
-    map.on('click', function(e) {
+    map.on('click', async function(e) {
         // Only identify if we have boundaries loaded and ArcGIS service configured
-        if (!arcgisServiceUrl || boundariesLayer.getLayers().length === 0) {
+        if (!arcgisServiceUrl || !map.getLayer('park-boundaries')) {
             return;
         }
 
         // Extract base MapServer URL
         const baseMapServerUrl = arcgisServiceUrl.replace(/\/\d+$/, '');
 
-        // Use ArcGIS identify at the MapServer level, specifying layer 0
-        L.esri.identifyFeatures({
-            url: baseMapServerUrl
-        })
-        .on(map)
-        .at(e.latlng)
-        .layers('all:0')       // Query only layer 0
-        .tolerance(5)          // 5 pixel tolerance for clicking
-        .returnGeometry(false) // Don't return geometry, only attributes
-        .run(function(error, featureCollection, response) {
-            if (error) {
-                console.error('Identify error:', error);
-                return;
-            }
+        // Build identify request
+        const identifyUrl = `${baseMapServerUrl}/identify`;
+        const params = new URLSearchParams({
+            f: 'json',
+            geometry: JSON.stringify({ x: e.lngLat.lng, y: e.lngLat.lat }),
+            geometryType: 'esriGeometryPoint',
+            layers: 'all:0',
+            mapExtent: map.getBounds().toArray().flat().join(','),
+            imageDisplay: `${map.getCanvas().width},${map.getCanvas().height},96`,
+            sr: '4326',
+            tolerance: 5,
+            returnGeometry: false
+        });
 
-            // Check response structure
-            if (!featureCollection || !featureCollection.features || featureCollection.features.length === 0) {
-                // No features found at click location
-                return;
+        try {
+            const response = await fetch(`${identifyUrl}?${params.toString()}`);
+            const data = await response.json();
+
+            if (!data.results || data.results.length === 0) {
+                return; // No features found
             }
 
             // Get the first feature found
-            const feature = featureCollection.features[0];
+            const feature = data.results[0];
 
-            // Check if feature has the expected properties
-            if (!feature.properties || !feature.properties.OBJECTID_1) {
+            if (!feature.attributes || !feature.attributes.OBJECTID_1) {
                 console.warn('Feature missing expected properties:', feature);
                 return;
             }
 
             // Get objectId - ensure it's a number for consistent comparison
-            const objectId = Number(feature.properties.OBJECTID_1);
-            const parkName = feature.properties.NAME || 'Unknown Park';
+            const objectId = Number(feature.attributes.OBJECTID_1);
+            const parkName = feature.attributes.NAME || 'Unknown Park';
 
             console.log(`Clicked park: ${parkName}, OBJECTID_1: ${objectId} (type: ${typeof objectId})`);
 
             // Find alerts for this reserve
-            // Note: reserve_object_id might be number or string, so compare both as numbers
             const parkAlerts = allAlerts.filter(a => {
                 const reserveId = Number(a.reserve_object_id);
                 return reserveId === objectId;
@@ -467,13 +476,16 @@ function setupBoundaryClickHandler() {
             }
 
             if (parkAlerts.length > 0) {
-                // Create and show popup using same function as markers
-                L.popup()
-                    .setLatLng(e.latlng)
-                    .setContent(createPopupContent(parkName, parkAlerts))
-                    .openOn(map);
+                // Create and show popup
+                const popupContent = createPopupContent(parkName, parkAlerts);
+                new maplibregl.Popup()
+                    .setLngLat([e.lngLat.lng, e.lngLat.lat])
+                    .setHTML(popupContent)
+                    .addTo(map);
             }
-        });
+        } catch (error) {
+            console.error('Error identifying features:', error);
+        }
     });
 
     console.log('Boundary click handler initialized');
@@ -495,38 +507,45 @@ function createMarker(lat, lon, parkName, alerts, reserveObjectId) {
         color = '#f39c12'; // Orange for closed areas
     }
 
-    // Create custom icon
-    const icon = L.divIcon({
-        className: 'custom-marker',
-        html: `
-            <div style="
-                background-color: ${color};
-                width: 30px;
-                height: 30px;
-                border-radius: 50%;
-                border: 3px solid white;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: white;
-                font-weight: bold;
-                font-size: 14px;
-            ">${alerts.length}</div>
-        `,
-        iconSize: [30, 30],
-        iconAnchor: [15, 15]
-    });
+    // Create custom marker element
+    const el = document.createElement('div');
+    el.className = 'custom-marker';
+    el.innerHTML = `
+        <div style="
+            background-color: ${color};
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: 3px solid white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            cursor: pointer;
+        ">${alerts.length}</div>
+    `;
 
     // Create marker
-    const marker = L.marker([lat, lon], { icon }).addTo(markersLayer);
+    const marker = new maplibregl.Marker({ element: el })
+        .setLngLat([lon, lat])
+        .addTo(map);
 
     // Create popup content
     const popupContent = createPopupContent(parkName, alerts);
-    marker.bindPopup(popupContent);
 
-    // Don't auto-open sidebar on marker click - let user choose from popup
-    // The popup items will call showParkAlerts() when clicked
+    // Create popup and attach to marker
+    const popup = new maplibregl.Popup({
+        offset: 25,
+        maxWidth: '350px'
+    }).setHTML(popupContent);
+
+    marker.setPopup(popup);
+
+    // Store marker reference
+    markers.push(marker);
 }
 
 /**
@@ -968,18 +987,24 @@ async function init() {
     // Initialize map
     initMap();
 
-    // Load configuration first
-    await loadConfig();
+    // Wait for map to load before adding data
+    map.on('load', async () => {
+        // Load configuration first
+        await loadConfig();
 
-    // Load data
-    await Promise.all([
-        loadCategories(),
-        loadStats(),
-        loadAlerts()
-    ]);
+        // Load data
+        await Promise.all([
+            loadCategories(),
+            loadStats(),
+            loadAlerts()
+        ]);
 
-    // Handle URL routing for deep-linked alerts
-    await handleURLRouting();
+        // Handle URL routing for deep-linked alerts
+        await handleURLRouting();
+
+        // Setup boundary click handler for interactive park boundaries
+        setupBoundaryClickHandler();
+    });
 
     // Setup event listeners
     document.getElementById('category-filter').addEventListener('change', onCategoryChange);
@@ -991,9 +1016,6 @@ async function init() {
     // Setup mobile filter toggle
     setupFilterToggle();
 
-    // Setup boundary click handler for interactive park boundaries
-    setupBoundaryClickHandler();
-
     console.log('Initialization complete');
 }
 
@@ -1002,6 +1024,7 @@ window.showParkAlerts = showParkAlerts;
 window.showAlertDetails = showAlertDetails;
 window.previousAlert = previousAlert;
 window.nextAlert = nextAlert;
+window.copyShareLink = copyShareLink;
 
 // Start the app when DOM is ready
 if (document.readyState === 'loading') {

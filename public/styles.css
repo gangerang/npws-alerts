@@ -293,11 +293,26 @@ body {
     background-color: rgba(231, 76, 60, 0.6);
 }
 
-/* Custom Popup Styles */
-.leaflet-popup-content {
-    margin: 0.8rem;
+/* Custom Popup Styles - MapLibre */
+.maplibregl-popup-content {
+    padding: 0;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.maplibregl-popup-content .popup-content {
+    padding: 0.8rem;
     min-width: 250px;
     max-width: 350px;
+}
+
+.maplibregl-popup-close-button {
+    font-size: 20px;
+    padding: 0;
+    margin: 8px;
+    width: 24px;
+    height: 24px;
+    line-height: 24px;
 }
 
 .popup-title {
@@ -623,7 +638,7 @@ body {
         padding: 1.5rem 1rem;
     }
 
-    .leaflet-popup-content {
+    .maplibregl-popup-content {
         max-width: 90vw;
     }
 }
