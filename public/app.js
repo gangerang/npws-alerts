@@ -200,15 +200,13 @@ async function loadStats() {
             const statsDiv = document.getElementById('stats');
             const { alerts, reserves, lastSync } = result.data;
 
-            // Format date and time
-            const lastUpdated = new Date(lastSync);
-            const dateStr = lastUpdated.toLocaleDateString();
-            const timeStr = lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            // Format last sync time as relative time
+            const lastUpdatedStr = getRelativeTime(lastSync);
 
             statsDiv.innerHTML = `
                 <span class="stat-item">📊 ${alerts} Alerts</span>
                 <span class="stat-item">🏞️ ${reserves} Reserves</span>
-                <span class="stat-item">🔄 Last Updated: ${dateStr} ${timeStr}</span>
+                <span class="stat-item">🔄 Refreshed: ${lastUpdatedStr}</span>
             `;
         }
     } catch (error) {
@@ -615,6 +613,28 @@ function getAlertIconClass(alert) {
 }
 
 /**
+ * Format relative time (e.g., "5 minutes ago", "2 hours ago")
+ */
+function getRelativeTime(dateString) {
+    // Treat the date as UTC by appending 'Z' if not present
+    const utcDateString = dateString.includes('Z') ? dateString : dateString + 'Z';
+    const date = new Date(utcDateString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins} minute${diffMins === 1 ? '' : 's'} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
+    if (diffDays < 30) return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
+
+    // For older dates, show the actual date
+    return date.toLocaleDateString();
+}
+
+/**
  * Show park alerts with navigation
  */
 function showParkAlerts(parkId, alertIndex = 0) {
@@ -662,7 +682,8 @@ function showAlertDetails(index) {
     // Parse dates
     const startDate = new Date(alert.start_date).toLocaleDateString();
     const endDate = alert.end_date ? new Date(alert.end_date).toLocaleDateString() : 'Ongoing';
-    const lastReviewed = new Date(alert.last_reviewed).toLocaleDateString();
+    // For last_reviewed, show relative time (e.g., "5 minutes ago")
+    const lastReviewed = getRelativeTime(alert.last_reviewed);
 
     // Build navigation
     const hasMultipleAlerts = currentParkAlerts.length > 1;
