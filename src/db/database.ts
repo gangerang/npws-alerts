@@ -3,6 +3,7 @@ import { DatabaseSchema } from './schema';
 import { AlertRecord, ReserveRecord, ParkMappingRecord, ProcessingStats } from '../models/types';
 import * as fs from 'fs';
 import * as path from 'path';
+import { loadManualMappings, getDefaultCSVPath, ManualMapping } from '../utils/csvMappingLoader';
 
 export class NPWSDatabase {
   private db: Database.Database;
@@ -453,5 +454,68 @@ export class NPWSDatabase {
       reserves: reserveCount.count,
       lastSync: lastSync?.started_at || null,
     };
+  }
+
+  /**
+   * Load manual park mappings from CSV file
+   * This allows manual mapping of parks that cannot be automatically matched
+   */
+  public loadManualMappingsFromCSV(csvPath?: string): number {
+    const path = csvPath || getDefaultCSVPath();
+    const mappings = loadManualMappings(path);
+
+    if (mappings.length === 0) {
+      return 0;
+    }
+
+    console.log(`Applying ${mappings.length} manual park mappings...`);
+
+    let appliedCount = 0;
+    let skippedCount = 0;
+
+    for (const mapping of mappings) {
+      try {
+        // If object_id is null, this is an explicitly unmappable park
+        // We still create a mapping record but with null object_id
+        // This prevents automatic matching attempts and allows the alert to display without location
+        if (mapping.object_id === null) {
+          console.log(`  Manual mapping (unmappable): "${mapping.park_name}" (${mapping.park_id})`);
+          // Don't insert a mapping for unmappable parks - just log it
+          // This way automatic matching will still be attempted
+          skippedCount++;
+          continue;
+        }
+
+        // Verify the reserve exists
+        const reserve = this.db.prepare('SELECT * FROM reserves WHERE object_id = ?').get(mapping.object_id) as ReserveRecord | undefined;
+
+        if (!reserve) {
+          console.warn(`  Warning: Reserve with object_id ${mapping.object_id} not found for park "${mapping.park_name}" - skipping`);
+          skippedCount++;
+          continue;
+        }
+
+        // Use provided reserve_name or fall back to reserve's location/name
+        const reserveName = mapping.reserve_name || reserve.location || reserve.name;
+
+        // Create park mapping
+        this.upsertParkMapping({
+          park_id: mapping.park_id,
+          park_name: mapping.park_name,
+          object_id: mapping.object_id,
+          reserve_name: reserveName,
+        });
+
+        console.log(`  ✓ Manual mapping applied: "${mapping.park_name}" -> "${reserveName}" (object_id: ${mapping.object_id})`);
+        appliedCount++;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`  ✗ Error applying manual mapping for park "${mapping.park_name}":`, errorMessage);
+        skippedCount++;
+      }
+    }
+
+    console.log(`Manual mappings complete: ${appliedCount} applied, ${skippedCount} skipped`);
+    return appliedCount;
   }
 }

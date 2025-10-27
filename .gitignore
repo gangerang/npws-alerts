@@ -8,11 +8,11 @@ dist/
 .env
 
 # Database
-data/
-*.db
-*.db-journal
-*.db-shm
-*.db-wal
+data/*.db
+data/*.db-journal
+data/*.db-shm
+data/*.db-wal
+data/.gitkeep
 
 # Logs
 logs/

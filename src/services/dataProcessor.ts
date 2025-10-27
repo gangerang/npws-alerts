@@ -163,6 +163,11 @@ export class DataProcessor {
 
     console.log('Syncing alerts data...');
 
+    // Load manual park mappings from CSV before processing alerts
+    // This allows manual override of automatic matching
+    console.log('\nStep 0: Loading manual park mappings from CSV...');
+    this.db.loadManualMappingsFromCSV();
+
     // Mark all existing alerts as inactive before syncing
     // Alerts that are still active in the API will be re-activated during upsert
     console.log('\nStep 1: Marking all existing alerts as inactive...');

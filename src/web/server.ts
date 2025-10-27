@@ -11,6 +11,10 @@ const PORT = process.env.PORT || 3000;
 const config = loadConfig();
 const db = new NPWSDatabase(config.databasePath);
 
+// Load manual park mappings from CSV on startup
+console.log('Loading manual park mappings from CSV...');
+db.loadManualMappingsFromCSV();
+
 // Middleware
 app.use(cors());
 app.use(express.json());

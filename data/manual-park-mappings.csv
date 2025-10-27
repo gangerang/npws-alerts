@@ -1,0 +1,34 @@
+park_id,park_name,object_id,reserve_name,notes
+# Manual park-to-reserve mappings for parks that cannot be automatically matched
+#
+# HOW TO ADD MAPPINGS:
+# 1. Get unmapped parks from: http://localhost:3000/api/unmapped-parks
+# 2. Find the matching reserve in: http://localhost:3000/api/reserves
+# 3. Add a row with: park_id, park_name, object_id, reserve_name, notes
+# 4. Rebuild (npm run build) and restart server/sync
+#
+# FORMAT:
+#   park_id       - UUID from NPWS API (e.g., bb73c415-7a2f-45f6-8f51-a02c48b535d3)
+#   park_name     - Display name from NPWS (e.g., "Kwiambal National Park (Community Conservation Area)")
+#   object_id     - Reserve object_id from reserves table (e.g., 123456)
+#   reserve_name  - Display name override (optional - uses reserve name/location if empty)
+#   notes         - Optional explanation (e.g., "Manual mapping - CCA not in reserves dataset")
+#
+# EXAMPLE (commented out):
+# a0706b95-03ae-4728-9489-dcae74b7c33c,Kwiambal National Park (Community Conservation Area),123456,Kwiambal National Park,Manual mapping - CCA zone not in reserves
+#
+# CURRENTLY UNMAPPED PARKS (as of 2025-10-27):
+# - Bulagaranda (Mount Yarrowyck) Aboriginal Area
+# - Corrabare South Flora Reserve
+# - Kwiambal National Park (Community Conservation Area)
+# - Stonewoman Aboriginal Area
+# - The Rock Nature Reserve - Kengal Aboriginal Place
+# - Watagan Flora Reserves
+#
+# Add your mappings below this line:
+bb73c415-7a2f-45f6-8f51-a02c48b535d3,Bulagaranda (Mount Yarrowyck) Aboriginal Area,135,Bulagaranda (Mt Yarrowyck) Aboriginal Area,manual mapping - mt vs mount
+8e6078ff-ed66-439a-bf60-d6f6a03fb23f,Corrabare  South Flora Reserve,4910,Corrabare South FR,manual mapping - fr with extra space
+a0706b95-03ae-4728-9489-dcae74b7c33c,Kwiambal National Park (Community Conservation Area),440,Kwiambal CCA Zone 1 National Park,manual mapping
+0997f657-e6ad-4671-a760-c076dd148871,Stonewoman Aboriginal Area ,700,Stonewoman Aboriginal Area,manual mapping - extra space
+1f4826c4-b1d9-4708-8674-8517345c76a9,The Rock Nature Reserve - Kengal Aboriginal Place,730,The Rock Nature Reserve,manual mapping
+0189c7e7-2631-4167-b3bd-ff9a1e7b917f,Watagan Flora Reserves,3630,Watagan Flora Reserves,manual mapping - fr but no entry
