@@ -56,7 +56,7 @@ async function handleURLRouting() {
     const urlParams = new URLSearchParams(window.location.search);
 
     // Check if this is an alert URL: /alert/:parkSlug or /alert/:parkSlug/:alertSlug/:alertId
-    const alertMatch = path.match(/^\/alert\/([^\/]+)(?:\/([^\/]+)\/([^\/]+))?$/);
+    const alertMatch = path.match(/^\/alert\/([^\/]+)\/?(?:([^\/]+)\/([^\/]+)\/?)?$/);
 
     if (!alertMatch) {
         return; // Not an alert URL, continue normal flow
