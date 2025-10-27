@@ -11,11 +11,10 @@ dist
 .env.local
 .env.*.local
 
-# Data and database files
-data/
-*.db
-*.db-shm
-*.db-wal
+# Data database files
+data/*.db
+data/*.db-shm
+data/*.db-wal
 
 # Git
 .git

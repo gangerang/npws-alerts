@@ -15,7 +15,7 @@ park_id,park_name,object_id,reserve_name,notes
 #   notes         - Optional explanation (e.g., "Manual mapping - CCA not in reserves dataset")
 #
 # EXAMPLE (commented out):
-# a0706b95-03ae-4728-9489-dcae74b7c33c,Kwiambal National Park (Community Conservation Area),123456,Kwiambal National Park,Manual mapping - CCA zone not in reserves
+# a0706b95-03ae-4728-9489-dcae74b7c33c,Kwiambal National Park (Community Conservation Area),12345,Kwiambal National Park,Manual mapping - CCA zone not in reserves
 #
 # CURRENTLY UNMAPPED PARKS (as of 2025-10-27):
 # - Bulagaranda (Mount Yarrowyck) Aboriginal Area
