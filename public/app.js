@@ -28,6 +28,106 @@ const CATEGORY_COLORS = {
 };
 
 /**
+ * Create URL-friendly slug from text
+ */
+function createSlug(text) {
+    return text
+        .toLowerCase()
+        .trim()
+        .replace(/[^\w\s-]/g, '') // Remove special characters
+        .replace(/\s+/g, '-')      // Replace spaces with hyphens
+        .replace(/-+/g, '-')       // Replace multiple hyphens with single
+        .replace(/^-+|-+$/g, '');  // Remove leading/trailing hyphens
+}
+
+/**
+ * Extract numeric ID from NPWS alert_id (e.g., "npws-fis@id.ngcomms.net/eme/8478122" -> "8478122")
+ */
+function extractNPWSId(alertId) {
+    const match = alertId.match(/\/(\d+)$/);
+    return match ? match[1] : alertId;
+}
+
+/**
+ * Handle URL routing for deep-linked alerts
+ */
+async function handleURLRouting() {
+    const path = window.location.pathname;
+    const urlParams = new URLSearchParams(window.location.search);
+
+    // Check if this is an alert URL: /alert/:parkSlug or /alert/:parkSlug/:alertSlug/:alertId
+    const alertMatch = path.match(/^\/alert\/([^\/]+)(?:\/([^\/]+)\/([^\/]+))?$/);
+
+    if (!alertMatch) {
+        return; // Not an alert URL, continue normal flow
+    }
+
+    const [, parkSlug, alertSlug, id] = alertMatch;
+
+    try {
+        if (id) {
+            // Specific alert: /alert/:parkSlug/:alertSlug/:id
+            const response = await fetch(`${API_BASE}/api/alert/${parkSlug}/${alertSlug}/${id}`);
+            const result = await response.json();
+
+            if (result.success && result.data) {
+                const alert = result.data;
+
+                // Store alert for display
+                window[`alerts_${alert.park_id}`] = [alert];
+
+                // Restore map state if provided in URL
+                if (urlParams.has('lat') && urlParams.has('lon') && urlParams.has('z')) {
+                    const lat = parseFloat(urlParams.get('lat'));
+                    const lon = parseFloat(urlParams.get('lon'));
+                    const zoom = parseInt(urlParams.get('z'));
+                    map.setView([lat, lon], zoom);
+                } else if (alert.centroid_lat && alert.centroid_lon) {
+                    // Center on park location
+                    map.setView([alert.centroid_lat, alert.centroid_lon], 12);
+                }
+
+                // Show alert details
+                showParkAlerts(alert.park_id, 0);
+            } else {
+                console.error('Alert not found:', parkSlug, id);
+            }
+        } else {
+            // Park alerts: /alert/:parkSlug
+            const response = await fetch(`${API_BASE}/api/alert/${parkSlug}`);
+            const result = await response.json();
+
+            if (result.success && result.data) {
+                const { reserve, alerts } = result.data;
+
+                // Store alerts for display
+                if (alerts.length > 0) {
+                    window[`alerts_${alerts[0].park_id}`] = alerts;
+
+                    // Restore map state if provided
+                    if (urlParams.has('lat') && urlParams.has('lon') && urlParams.has('z')) {
+                        const lat = parseFloat(urlParams.get('lat'));
+                        const lon = parseFloat(urlParams.get('lon'));
+                        const zoom = parseInt(urlParams.get('z'));
+                        map.setView([lat, lon], zoom);
+                    } else if (reserve.centroid_lat && reserve.centroid_lon) {
+                        // Center on park location
+                        map.setView([reserve.centroid_lat, reserve.centroid_lon], 12);
+                    }
+
+                    // Show first alert (or open popup with all alerts)
+                    showParkAlerts(alerts[0].park_id, 0);
+                }
+            } else {
+                console.error('Park not found:', parkSlug);
+            }
+        }
+    } catch (error) {
+        console.error('Error handling URL routing:', error);
+    }
+}
+
+/**
  * Initialize the map
  */
 function initMap() {
@@ -587,14 +687,36 @@ function showAlertDetails(index) {
         </div>
     ` : '';
 
+    // Generate shareable URL using NPWS ID number
+    const parkSlug = alert.reserve_name_short ? createSlug(alert.reserve_name_short) : createSlug(alert.park_name);
+    const alertSlug = createSlug(alert.alert_title);
+    const npwsId = extractNPWSId(alert.alert_id);
+    const mapCenter = map.getCenter();
+    const mapZoom = map.getZoom();
+    const shareableURL = `${window.location.origin}/alert/${parkSlug}/${alertSlug}/${npwsId}?lat=${mapCenter.lat.toFixed(5)}&lon=${mapCenter.lng.toFixed(5)}&z=${mapZoom}`;
+
+    // Update browser history without page reload
+    if (window.history && window.history.pushState) {
+        window.history.pushState(
+            { npwsId: npwsId, parkId: alert.park_id },
+            alert.alert_title,
+            shareableURL
+        );
+    }
+
     content.innerHTML = `
         ${alertCounter}
 
         <div class="detail-header">
             <h2 class="detail-title">${alert.alert_title}</h2>
             <p class="detail-park">${alert.park_name}</p>
-            <span class="detail-category">${alert.alert_category}</span>
-            ${statusBadge}
+            <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-top: 0.5rem;">
+                <span class="detail-category">${alert.alert_category}</span>
+                ${statusBadge}
+                <button class="btn-secondary" onclick="copyShareLink('${shareableURL.replace(/'/g, "\\'")}');" style="margin-left: auto; padding: 0.4rem 0.8rem; font-size: 0.85rem;">
+                    📋 Copy Link
+                </button>
+            </div>
         </div>
 
         <div class="detail-section">
@@ -651,6 +773,72 @@ function showAlertDetails(index) {
 function hideDetails() {
     const panel = document.getElementById('details-panel');
     panel.classList.add('hidden');
+
+    // Reset URL to homepage when closing details
+    if (window.history && window.history.pushState) {
+        window.history.pushState(null, '', '/');
+    }
+}
+
+/**
+ * Copy shareable link to clipboard
+ */
+async function copyShareLink(url) {
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(url);
+            showToast('Link copied to clipboard!');
+        } else {
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = url;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                showToast('Link copied to clipboard!');
+            } catch (err) {
+                showToast('Failed to copy link', true);
+                console.error('Failed to copy:', err);
+            }
+            document.body.removeChild(textArea);
+        }
+    } catch (err) {
+        showToast('Failed to copy link', true);
+        console.error('Failed to copy:', err);
+    }
+}
+
+/**
+ * Show toast notification
+ */
+function showToast(message, isError = false) {
+    // Remove existing toast if any
+    const existingToast = document.getElementById('toast');
+    if (existingToast) {
+        existingToast.remove();
+    }
+
+    // Create toast element
+    const toast = document.createElement('div');
+    toast.id = 'toast';
+    toast.className = 'toast' + (isError ? ' toast-error' : '');
+    toast.textContent = message;
+
+    // Add to page
+    document.body.appendChild(toast);
+
+    // Trigger animation
+    setTimeout(() => toast.classList.add('toast-show'), 10);
+
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+        toast.classList.remove('toast-show');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
 }
 
 /**
@@ -754,6 +942,9 @@ async function init() {
         loadStats(),
         loadAlerts()
     ]);
+
+    // Handle URL routing for deep-linked alerts
+    await handleURLRouting();
 
     // Setup event listeners
     document.getElementById('category-filter').addEventListener('change', onCategoryChange);

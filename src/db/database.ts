@@ -17,7 +17,10 @@ export class NPWSDatabase {
 
     // Open database connection
     this.db = new Database(dbPath);
-    this.db.pragma('journal_mode = WAL'); // Better performance for concurrent access
+
+    // Use DELETE journal mode for WSL compatibility (instead of WAL which requires shared memory)
+    // WAL mode doesn't work well on Windows-mounted filesystems in WSL
+    this.db.pragma('journal_mode = DELETE');
     this.db.pragma('foreign_keys = ON');
 
     // Initialize schema

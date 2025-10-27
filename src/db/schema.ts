@@ -58,6 +58,13 @@ export class DatabaseSchema {
       CREATE TABLE IF NOT EXISTS alerts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         alert_id TEXT NOT NULL,
+        npws_id TEXT GENERATED ALWAYS AS (
+          CASE
+            WHEN alert_id GLOB '*/*' THEN
+              replace(alert_id, rtrim(alert_id, replace(alert_id, '/', '')), '')
+            ELSE alert_id
+          END
+        ) STORED,
         park_name TEXT NOT NULL,
         park_id TEXT NOT NULL,
         alert_title TEXT NOT NULL,
@@ -168,6 +175,9 @@ export class DatabaseSchema {
 
       CREATE INDEX IF NOT EXISTS idx_alerts_is_active
         ON alerts(is_active);
+
+      CREATE INDEX IF NOT EXISTS idx_alerts_npws_id
+        ON alerts(npws_id);
 
       CREATE INDEX IF NOT EXISTS idx_reserves_name
         ON reserves(name);

@@ -17,6 +17,27 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '../../public')));
 
 /**
+ * Utility Functions
+ */
+
+// Create URL-friendly slug from text
+function createSlug(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '') // Remove special characters
+    .replace(/\s+/g, '-')      // Replace spaces with hyphens
+    .replace(/-+/g, '-')       // Replace multiple hyphens with single
+    .replace(/^-+|-+$/g, '');  // Remove leading/trailing hyphens
+}
+
+// Extract numeric ID from NPWS alert_id (e.g., "npws-fis@id.ngcomms.net/eme/8478122" -> "8478122")
+function extractNPWSId(alertId: string): string {
+  const match = alertId.match(/\/(\d+)$/);
+  return match ? match[1] : alertId;
+}
+
+/**
  * API Routes
  */
 
@@ -144,6 +165,94 @@ app.get('/api/alerts/categories', (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch categories',
+    });
+  }
+});
+
+// API endpoint: Get alerts for a specific park by slug (using reserve name_short)
+app.get('/api/alert/:parkSlug', (req, res) => {
+  try {
+    const { parkSlug } = req.params;
+
+    // Find reserve by matching slug against name_short
+    const reserveStmt = db['db'].prepare(`
+      SELECT object_id, name, name_short, centroid_lat, centroid_lon
+      FROM reserves
+    `);
+    const reserves = reserveStmt.all() as any[];
+
+    // Find matching reserve by slug
+    const matchingReserve = reserves.find((r: any) => createSlug(r.name_short) === parkSlug);
+
+    if (!matchingReserve) {
+      return res.status(404).json({
+        success: false,
+        error: 'Park not found',
+      });
+    }
+
+    // Get all active alerts for this reserve
+    const alertsStmt = db['db'].prepare(`
+      SELECT a.*, r.name as reserve_name, r.name_short as reserve_name_short,
+             r.centroid_lat, r.centroid_lon, r.object_id as reserve_object_id
+      FROM alerts a
+      INNER JOIN park_mappings pm ON a.park_id = pm.park_id
+      INNER JOIN reserves r ON pm.object_id = r.object_id
+      WHERE r.object_id = ? AND a.is_active = 1
+      ORDER BY a.alert_category, a.start_date
+    `);
+    const alerts = alertsStmt.all(matchingReserve.object_id);
+
+    res.json({
+      success: true,
+      data: {
+        reserve: matchingReserve,
+        alerts: alerts,
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching park alerts:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch park alerts',
+    });
+  }
+});
+
+// API endpoint: Get specific alert by park slug, alert slug, and NPWS ID number
+app.get('/api/alert/:parkSlug/:alertSlug/:npwsId', (req, res) => {
+  try {
+    const { parkSlug, alertSlug, npwsId } = req.params;
+
+    // Fetch alert with reserve information
+    // Use indexed npws_id column for fast lookup
+    const stmt = db['db'].prepare(`
+      SELECT a.*, r.name as reserve_name, r.name_short as reserve_name_short,
+             r.centroid_lat, r.centroid_lon, r.object_id as reserve_object_id
+      FROM alerts a
+      LEFT JOIN park_mappings pm ON a.park_id = pm.park_id
+      LEFT JOIN reserves r ON pm.object_id = r.object_id
+      WHERE a.npws_id = ? AND a.is_active = 1
+      LIMIT 1
+    `);
+    const alert = stmt.get(npwsId);
+
+    if (!alert) {
+      return res.status(404).json({
+        success: false,
+        error: 'Alert not found',
+      });
+    }
+
+    res.json({
+      success: true,
+      data: alert,
+    });
+  } catch (error) {
+    console.error('Error fetching alert:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch alert',
     });
   }
 });
@@ -284,6 +393,15 @@ app.get('/api/stats', (req, res) => {
 });
 
 // Serve index.html for root route
+// Page routes - serve HTML (must come after API routes)
+app.get('/alert/:parkSlug/:alertSlug/:npwsId', (req, res) => {
+  res.sendFile(path.join(__dirname, '../../public/index.html'));
+});
+
+app.get('/alert/:parkSlug', (req, res) => {
+  res.sendFile(path.join(__dirname, '../../public/index.html'));
+});
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../../public/index.html'));
 });
