@@ -41,6 +41,9 @@ COPY --from=builder /build/dist ./dist
 # Copy public static files
 COPY public ./public
 
+# Copy manual park mappings CSV
+COPY data/manual-park-mappings.csv ./data/
+
 # Copy startup script
 COPY start.sh ./
 RUN chmod +x start.sh
