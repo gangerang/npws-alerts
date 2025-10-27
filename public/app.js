@@ -100,10 +100,15 @@ async function loadStats() {
             const statsDiv = document.getElementById('stats');
             const { alerts, reserves, lastSync } = result.data;
 
+            // Format date and time
+            const lastUpdated = new Date(lastSync);
+            const dateStr = lastUpdated.toLocaleDateString();
+            const timeStr = lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
             statsDiv.innerHTML = `
                 <span class="stat-item">📊 ${alerts} Alerts</span>
                 <span class="stat-item">🏞️ ${reserves} Reserves</span>
-                <span class="stat-item">🔄 Last Updated: ${new Date(lastSync).toLocaleDateString()}</span>
+                <span class="stat-item">🔄 Last Updated: ${dateStr} ${timeStr}</span>
             `;
         }
     } catch (error) {
@@ -428,6 +433,17 @@ function createMarker(lat, lon, parkName, alerts, reserveObjectId) {
 }
 
 /**
+ * Format date for alert display
+ */
+function formatAlertDate(dateString) {
+    if (!dateString) return 'Ongoing';
+    const date = new Date(dateString);
+    const day = date.getDate();
+    const month = date.toLocaleDateString('en-US', { month: 'short' });
+    return `${day} ${month}`;
+}
+
+/**
  * Create popup content for a park
  */
 function createPopupContent(parkName, alerts) {
@@ -437,21 +453,37 @@ function createPopupContent(parkName, alerts) {
     const parkId = alerts[0].park_id;
     window[`alerts_${parkId}`] = alerts;
 
+    // Sort alerts: first by category (alphabetically), then by start date
+    const sortedAlerts = [...alerts].sort((a, b) => {
+        // Primary sort: category
+        const catCompare = a.alert_category.localeCompare(b.alert_category);
+        if (catCompare !== 0) return catCompare;
+
+        // Secondary sort: start date (earliest first)
+        return new Date(a.start_date) - new Date(b.start_date);
+    });
+
     return `
         <div class="popup-content">
             <div class="popup-title">${parkName}</div>
             <div class="popup-subtitle">${alertCount} alert${alertCount > 1 ? 's' : ''}</div>
 
             <div class="popup-alerts-list">
-                ${alerts.map((alert, index) => `
-                    <div class="popup-alert-item" onclick="showParkAlerts('${parkId}', ${index})">
-                        <div class="popup-alert-icon ${getAlertIconClass(alert)}">!</div>
-                        <div class="popup-alert-content">
-                            <div class="popup-alert-title">${alert.alert_title}</div>
-                            <div class="popup-alert-category">${alert.alert_category}</div>
+                ${sortedAlerts.map((alert, index) => {
+                    const startDate = formatAlertDate(alert.start_date);
+                    const endDate = formatAlertDate(alert.end_date);
+                    const dateRange = `${startDate} - ${endDate}`;
+
+                    return `
+                        <div class="popup-alert-item" onclick="showParkAlerts('${parkId}', ${index})">
+                            <div class="popup-alert-icon ${getAlertIconClass(alert)}">!</div>
+                            <div class="popup-alert-content">
+                                <div class="popup-alert-title">${alert.alert_title}</div>
+                                <div class="popup-alert-category">${alert.alert_category} | ${dateRange}</div>
+                            </div>
                         </div>
-                    </div>
-                `).join('')}
+                    `;
+                }).join('')}
             </div>
         </div>
     `;

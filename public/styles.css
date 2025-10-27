@@ -74,22 +74,24 @@ body {
     background: #ecf0f1;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     z-index: 999;
-}
-
-.quick-filters {
     padding: 0.75rem 1.5rem;
     display: flex;
     gap: 1rem;
-    align-items: flex-end;
-    border-bottom: 1px solid #d5dbdb;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.quick-filters {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
 }
 
 .advanced-filters {
-    padding: 1rem 1.5rem;
     display: flex;
     gap: 1rem;
-    align-items: flex-end;
-    flex-wrap: wrap;
+    align-items: center;
+    flex: 1;
 }
 
 .advanced-filters.collapsed {
@@ -98,15 +100,6 @@ body {
 
 .control-group {
     display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-    min-width: 150px;
-}
-
-.control-group label {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #34495e;
 }
 
 .control-group select,
@@ -116,6 +109,7 @@ body {
     border-radius: 4px;
     font-size: 0.9rem;
     background: white;
+    min-width: 150px;
 }
 
 .control-group select:focus,
@@ -380,7 +374,6 @@ body {
 .popup-alert-item:hover {
     background: #e9ecef;
     border-color: #3498db;
-    transform: translateX(2px);
 }
 
 .popup-alert-icon {
@@ -553,31 +546,30 @@ body {
     }
 
     /* Mobile Controls */
-    .quick-filters {
+    .controls-panel {
         padding: 0.5rem 1rem;
+        flex-direction: column;
+        gap: 0.5rem;
     }
 
-    .quick-filters .control-group {
-        flex-direction: row;
-        align-items: center;
+    .quick-filters {
         width: 100%;
         gap: 0.5rem;
     }
 
-    .quick-filters .control-group label {
-        min-width: 70px;
-        margin: 0;
-    }
-
-    .quick-filters .control-group select {
+    .quick-filters .control-group {
         flex: 1;
     }
 
+    .quick-filters .control-group select {
+        width: 100%;
+        min-width: 0;
+    }
+
     .advanced-filters {
-        padding: 0.75rem 1rem;
+        width: 100%;
         flex-direction: column;
-        align-items: stretch;
-        gap: 0.75rem;
+        gap: 0.5rem;
     }
 
     .advanced-filters.collapsed {
@@ -588,12 +580,12 @@ body {
         width: 100%;
     }
 
-    .advanced-filters .btn-primary,
-    .advanced-filters .btn-secondary {
+    .advanced-filters .control-group input {
         width: 100%;
+        min-width: 0;
     }
 
-    .control-group {
+    .advanced-filters .btn-secondary {
         width: 100%;
     }
 

@@ -32,30 +32,27 @@
 
         <!-- Controls Panel -->
         <div class="controls-panel">
-            <!-- Quick Access Bar (always visible on mobile) -->
+            <!-- Desktop: All filters on one line -->
+            <!-- Mobile: Category + Time always visible, Search in collapsible -->
             <div class="quick-filters">
                 <div class="control-group">
-                    <label for="category-filter">Category:</label>
                     <select id="category-filter">
                         <option value="">All Categories</option>
                     </select>
                 </div>
-            </div>
-
-            <!-- Advanced Filters (collapsible on mobile) -->
-            <div class="advanced-filters" id="advanced-filters">
                 <div class="control-group">
-                    <label for="time-filter">Time:</label>
                     <select id="time-filter">
                         <option value="current">Current Alerts</option>
                         <option value="future">Future Alerts</option>
                         <option value="all">All Alerts</option>
                     </select>
                 </div>
+            </div>
 
+            <!-- Advanced Filters (collapsible on mobile, visible on desktop) -->
+            <div class="advanced-filters" id="advanced-filters">
                 <div class="control-group">
-                    <label for="search-input">Search Park:</label>
-                    <input type="text" id="search-input" list="park-names" placeholder="Enter park name...">
+                    <input type="text" id="search-input" list="park-names" placeholder="Search park...">
                     <datalist id="park-names"></datalist>
                 </div>
 

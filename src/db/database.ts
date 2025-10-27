@@ -383,7 +383,14 @@ export class NPWSDatabase {
    */
   public getStats(): { alerts: number; reserves: number; lastSync: string | null } {
     const alertCount = this.db.prepare('SELECT COUNT(*) as count FROM alerts WHERE is_active = 1').get() as { count: number };
-    const reserveCount = this.db.prepare('SELECT COUNT(*) as count FROM reserves').get() as { count: number };
+    // Count only reserves that have active alerts (via park_mappings)
+    const reserveCount = this.db.prepare(`
+      SELECT COUNT(DISTINCT r.object_id) as count
+      FROM alerts a
+      INNER JOIN park_mappings pm ON a.park_id = pm.park_id
+      INNER JOIN reserves r ON pm.object_id = r.object_id
+      WHERE a.is_active = 1
+    `).get() as { count: number };
     const lastSync = this.db.prepare(
       "SELECT started_at FROM sync_history WHERE sync_status = 'completed' ORDER BY started_at DESC LIMIT 1"
     ).get() as { started_at: string } | undefined;
