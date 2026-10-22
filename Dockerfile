@@ -1,6 +1,6 @@
 # Multi-stage build for NPWS Alerts application
 # Stage 1: Build TypeScript application
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 
 # Install build dependencies for native modules (better-sqlite3)
 RUN apk add --no-cache python3 make g++
@@ -21,7 +21,7 @@ COPY src ./src
 RUN npm run build
 
 # Stage 2: Production image
-FROM node:20-alpine
+FROM node:24-alpine
 
 # Install runtime dependencies: sqlite for better-sqlite3, curl for healthcheck
 RUN apk add --no-cache sqlite curl
